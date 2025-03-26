@@ -26,7 +26,7 @@ struct DICOMImage: Identifiable {
 
         guard abs(pixelData.count - expectedLength) <= tolerance else {
             print("""
-            ❌ Errore: Lunghezza dei pixel non valida
+            Errore: Lunghezza dei pixel non valida
             - pixelData.count: \(pixelData.count)
             - rows: \(rows)
             - columns: \(columns)
@@ -38,7 +38,7 @@ struct DICOMImage: Identifiable {
             return nil
         }
 
-        print("✅ Lunghezza pixel valida: \(pixelData.count)")
+        print("Lunghezza pixel valida: \(pixelData.count)")
 
         // Crea lo spazio colore in scala di grigi
         let colorSpace = CGColorSpaceCreateDeviceGray()
@@ -52,7 +52,7 @@ struct DICOMImage: Identifiable {
         let croppedPixelData = pixelData.prefix(expectedLength)
 
         guard let provider = CGDataProvider(data: croppedPixelData as CFData) else {
-            print("❌ Errore: Impossibile creare il CGDataProvider.")
+            print("Errore: Impossibile creare il CGDataProvider.")
             return nil
         }
 
@@ -75,13 +75,13 @@ struct DICOMImage: Identifiable {
     func applyWindowing(center: Double, width: Double) -> CGImage? {
         // Gestisce solo immagini a 16 bit
         guard bitsAllocated == 16 else {
-            print("❌ Errore: Il windowing è supportato solo per immagini a 16 bit.")
+            print("Errore: Il windowing è supportato solo per immagini a 16 bit.")
             return nil
         }
 
         // Estrae il buffer di pixel
         guard let pixelBuffer = pixelData.withUnsafeBytes({ $0.bindMemory(to: Int16.self) }).baseAddress else {
-            print("❌ Errore: Impossibile ottenere il buffer di pixel.")
+            print("Errore: Impossibile ottenere il buffer di pixel.")
             return nil
         }
 
@@ -100,7 +100,7 @@ struct DICOMImage: Identifiable {
 
         // Crea un provider per l'immagine con i pixel modificati
         guard let provider = CGDataProvider(data: Data(adjustedPixels) as CFData) else {
-            print("❌ Errore: Impossibile creare il provider per il windowing.")
+            print("Errore: Impossibile creare il provider per il windowing.")
             return nil
         }
 
