@@ -100,3 +100,4 @@ struct VolumeRenderingView: NSViewRepresentable {
         }
     }
 }
+
