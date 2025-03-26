@@ -22,7 +22,7 @@ struct Model3DView: View {
     @State private var sceneView = SCNView()
     @State private var scene = SCNScene()
     @State private var cameraNode = SCNNode()
-    @State private var thresholdValue: Float = 150
+    @State private var thresholdValue: Float = 300
     
     var body: some View {
         VStack {
