@@ -1,73 +1,67 @@
-/*
- Classe che gestisce l'importazione e la gestione di file DICOM.
-
- Proprietà principali:
- - patients, currentPatient, currentSeries
-
- Funzionalità:
- - Importa file DICOM da una directory.
- - Legge i dati e crea oggetti Patient, DICOMSeries, e DICOMImage.
- - Crea un volume 3D da una serie DICOM.
-
- Scopo:
- Centralizza la gestione dei dati DICOM e ne facilita l'uso nell'applicazione.
- */
-
 import Foundation
 
-// Classe che gestisce l'importazione e l'elaborazione di file DICOM (imaging medico)
-// Implementa ObservableObject per l'integrazione con SwiftUI
+/*
+ Classe che gestisce l'importazione e l'elaborazione di file DICOM.
+ Si occupa di leggere i file, estrarre i dati e aggiornare l'interfaccia.
+ */
 class DICOMManager: ObservableObject {
-    // Proprietà pubblicate che notificano automaticamente l'interfaccia quando cambiano
-    @Published var patients: [Patient] = []          // Lista di pazienti
-    @Published var currentPatient: Patient?          // Paziente attualmente selezionato
-    @Published var currentSeries: DICOMSeries?       // Serie DICOM attualmente selezionata
-
-    // Enum per definire i possibili errori che possono verificarsi durante l'importazione DICOM
+    
+    // Lista di pazienti importati
+    @Published var patients: [Patient] = []
+    // Paziente attualmente selezionato
+    @Published var currentPatient: Patient?
+    // Serie DICOM attualmente visualizzata
+    @Published var currentSeries: DICOMSeries?
+    
+    // Definizione degli errori possibili durante l'importazione dei file DICOM
     enum DICOMError: Error {
-        case fileNotFound        // File non trovato
-        case invalidData         // Dati non validi
-        case importFailed(String) // Importazione fallita con messaggio di errore
-        case unsupportedFormat   // Formato non supportato
+        case fileNotFound       // Il file o la cartella non esistono
+        case invalidData        // Dati corrotti o file non valido
+        case importFailed(String) // Errore generico con messaggio
+        case unsupportedFormat  // Formato DICOM non supportato
     }
-
-    // Importa file DICOM da una directory specificata tramite URL
+    
+    /*
+     Importa file DICOM da una cartella selezionata dall'utente.
+     @param url Percorso della cartella contenente i file DICOM
+     @return Restituisce la serie DICOM importata
+     */
     func importDICOMFromDirectory(_ url: URL) async throws -> DICOMSeries {
         print("Importazione da: \(url.path)")
-
-        // Verifica che la directory esista
+        
+        // Verifica che il percorso esista e sia una cartella valida
         var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
-              isDirectory.boolValue else {
-            print("Path non è una directory: \(url.path)")
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue else {
             throw DICOMError.fileNotFound
         }
-
-        // Trova tutti i file nella directory
-        let fileURLs = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
-
-        // Filtra solo i file DICOM
-        let dicomFiles = fileURLs.filter { $0.pathExtension.lowercased() == "dcm" }
         
-        // Ordina i file per nome, che tipicamente corrisponde all'ordine visibile nella directory
+        // Recupera tutti i file presenti nella cartella
+        let fileURLs = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
+        
+        // Filtra solo i file con estensione .dcm (DICOM)
+        let dicomFiles = fileURLs.filter { $0.pathExtension.lowercased() == "dcm" }
         let sortedDicomFiles = dicomFiles.sorted { $0.lastPathComponent < $1.lastPathComponent }
-
-        print("Trovati \(sortedDicomFiles.count) file DICOM")
-
+        
+        // Se non ci sono file DICOM validi, restituisce un errore
         if sortedDicomFiles.isEmpty {
             throw DICOMError.fileNotFound
         }
-
-        // Usa i file ordinati
+        
+        // Legge e processa i file DICOM
         return try await readDICOMFiles(from: sortedDicomFiles)
     }
-
-    // Elabora i file DICOM trovati e crea una serie
+    
+    /*
+     Legge e analizza i file DICOM, creando una serie con le immagini estratte.
+     @param files Array di URL dei file DICOM
+     @return Serie DICOM contenente le immagini elaborate
+     */
     private func readDICOMFiles(from files: [URL]) async throws -> DICOMSeries {
-        // Crea un ID paziente univoco
+        
+        // Crea un nuovo identificatore per il paziente
         let patientID = UUID()
-
-        // Inizializza una nuova serie DICOM con informazioni di base
+        
+        // Inizializza una nuova serie DICOM con dati di base (TODO: )
         var series = DICOMSeries(
             id: UUID(),
             seriesInstanceUID: UUID().uuidString,
@@ -77,89 +71,80 @@ class DICOMManager: ObservableObject {
             patientID: patientID,
             seriesNumber: 1,
             institutionName: "Imported Hospital",
-            imageOrientation: [1, 0, 0, 0, 1, 0],
-            imagePosition: [0, 0, 0]
+            imageOrientation: [1, 0, 0, 0, 1, 0], // Direzione standard
+            imagePosition: [0, 0, 0] // Posizione iniziale
         )
-
-        // Array per memorizzare le immagini elaborate
+        
         var images: [DICOMImage] = []
-
-        // Elabora ogni file DICOM trovato
+        
+        // Itera su tutti i file DICOM trovati nella cartella
         for (i, fileURL) in files.enumerated() {
             do {
-                print("Lettura del file: \(fileURL.lastPathComponent)")
-
-                // Legge i dati binari del file
+                // Carica i dati binari del file DICOM
                 let fileData = try Data(contentsOf: fileURL)
-
-                // Verifica che il file abbia almeno la dimensione dell'header DICOM
-                let headerSize = 132 // dimensione tipica dell'header DICOM (128 + 4 byte)
-                guard fileData.count > headerSize else {
-                    print("File troppo piccolo per essere un DICOM valido: \(fileURL.lastPathComponent)")
-                    continue
-                }
-
-                // Estrae i dati dei pixel (versione semplificata)
-                // NOTA: In un'implementazione reale si dovrebbe analizzare l'header
+                
+                // Verifica che il file abbia almeno 132 byte per contenere un header DICOM (i metadati)
+                let headerSize = 132
+                guard fileData.count > headerSize else { continue }
+                
+                // Estrae i dati dei pixel (TODO: semplificato, in un'app reale servirebbe una libreria DICOM)
                 let pixelData = fileData.dropFirst(headerSize)
-
-                // Parametri di default per l'immagine (in un'implementazione reale andrebbero estratti dai metadati)
-                let rows = 512
-                let columns = 512
-                let bitsAllocated = 16
-
-                // Crea un oggetto immagine DICOM con i dati estratti
+                
+                // TODO: Crea un'istanza di immagine DICOM con dati di base
                 let image = DICOMImage(
                     id: UUID(),
                     pixelData: pixelData,
-                    rows: rows,
-                    columns: columns,
-                    bitsAllocated: bitsAllocated,
-                    pixelSpacing: (0.5, 0.5),
-                    sliceLocation: Double(i) * 2.0,  // Posizione della slice incrementale
-                    instanceNumber: i + 1,
+                    rows: 512, // Dimensioni predefinite dell'immagine
+                    columns: 512,
+                    bitsAllocated: 16, // Profondità dei bit
+                    pixelSpacing: (0.5, 0.5), // Spaziatura tra pixel
+                    sliceLocation: Double(i) * 2.0, // Posizione della slice lungo l'asse Z
+                    instanceNumber: i + 1, // Numero progressivo dell'immagine
                     metadata: ["SeriesInstanceUID": series.seriesInstanceUID],
-                    windowCenter: 40,
+                    windowCenter: 40, // Valori di finestra per il contrasto
                     windowWidth: 400
                 )
-
-                // Aggiunge l'immagine all'array
+                
+                // Aggiunge l'immagine alla serie
                 images.append(image)
-                print("Immagine \(i+1) caricata: \(rows)x\(columns)")
-
             } catch {
-                // Gestisce gli errori per ogni file, permettendo di continuare con gli altri
-                print("Errore nella lettura del file \(fileURL.lastPathComponent): \(error.localizedDescription)")
+                print("Errore nella lettura di \(fileURL.lastPathComponent): \(error.localizedDescription)")
             }
         }
-
-        // Verifica che sia stata elaborata almeno un'immagine
+        
+        // Se nessuna immagine è stata importata, restituisce errore
         if images.isEmpty {
             throw DICOMError.importFailed("Nessuna immagine DICOM valida trovata")
         }
-
+        
         // Assegna le immagini alla serie
         series.images = images
-
-        // Crea un paziente dimostrativo con dati fittizi
+        
+        // Crea un paziente di esempio (TODO: in un'app reale, i dati verrebbero estratti dai file DICOM)
         let patient = Patient(
             name: "Paziente Importato",
-            dateOfBirth: Calendar.current.date(byAdding: .year, value: -60, to: Date())!,
+            dateOfBirth: Calendar.current.date(byAdding: .year, value: -60, to: Date())!, // Paziente fittizio 60 anni
             medicalRecordNumber: "MRN12345",
             gender: .male
         )
+        
+        // Aggiorna la UI con i nuovi dati DICOM
+        let seriesCopy = series // Crea una copia di `series`
 
-        // Aggiorna le proprietà pubblicate sulla thread principale (UI)
         await MainActor.run {
             self.patients.append(patient)
             self.currentPatient = patient
-            self.currentSeries = series
+            self.currentSeries = seriesCopy // Usa la copia invece della variabile originale (perchè l'accesso a variabili in contesti concorrenti è diventato più restrittivo)
         }
-
+        
         return series
     }
-
-    // Crea un oggetto Volume 3D dalla serie di immagini DICOM
+    
+    /*
+     Genera una rappresentazione 3D della serie DICOM.
+     @param series La serie DICOM da trasformare in modello 3D
+     @return Un oggetto Volume opzionale
+     */
     func createVolumeFromSeries(_ series: DICOMSeries) -> Volume? {
         return Volume(from: series)
     }
