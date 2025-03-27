@@ -19,11 +19,8 @@ struct Patient: Identifiable, Codable {
     let id: UUID
     var name: String
     var dateOfBirth: Date
-    var medicalRecordNumber: String
+    var medicalRecordNumber: String // Numero di cartella clinica
     var gender: Gender
-    
-    // Rendi questa proprietà privata per la codifica, o escludila
-    var studySeries: [DICOMSeries] = []
     
     enum Gender: String, Codable, CaseIterable {
         case male = "Male"
@@ -31,10 +28,18 @@ struct Patient: Identifiable, Codable {
         case other = "Other"
     }
     
-    // Implementa CodingKeys per escludere studySeries dalla codifica
+    // Definiamo le studySeries, array di DICOMSeries, per poi escluderle dalla codifica
+    var studySeries: [DICOMSeries] = []
+    
+    /*
+     Implementa CodingKeys per escludere studySeries dalla codifica: non vogliamo che i dati relativi alle serie DICOM
+     vengano inclusi nell'oggetto Patient. Questo perchè le informazioni contenute nelle serie possono essere sensibili e
+     non vogliamo che vengano salvate insieme ad altri dati del paziente (come nome, data di nascita, ecc.).
+     */
     enum CodingKeys: String, CodingKey {
         case id, name, dateOfBirth, medicalRecordNumber, gender
     }
+    
     
     init(id: UUID = UUID(), name: String, dateOfBirth: Date, medicalRecordNumber: String, gender: Gender) {
         self.id = id
