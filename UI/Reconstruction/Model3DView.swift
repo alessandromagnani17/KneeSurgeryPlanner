@@ -160,7 +160,7 @@ struct Model3DView: View {
 
 // Estensione che aggiunge un metodo per creare una geometria SceneKit da una mesh Marching Cubes
 extension SCNGeometry {
-    convenience init(mesh: MarchingCubes.Mesh) {
+    convenience init(mesh: Mesh) {
         // Array per memorizzare vertici e normali convertiti
         var vertices: [SCNVector3] = []
         var normals: [SCNVector3] = []
