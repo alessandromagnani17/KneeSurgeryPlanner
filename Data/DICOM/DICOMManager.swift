@@ -1,31 +1,22 @@
 import Foundation
 
-/*
- Classe che gestisce l'importazione e l'elaborazione di file DICOM.
- Si occupa di leggere i file, estrarre i dati e aggiornare l'interfaccia.
- */
 class DICOMManager: ObservableObject {
     
-    // Lista di pazienti importati
+    // Liste e proprietà pubblicate
     @Published var patients: [Patient] = []
-    // Paziente attualmente selezionato
     @Published var currentPatient: Patient?
-    // Serie DICOM attualmente visualizzata
     @Published var currentSeries: DICOMSeries?
     
-    // Definizione degli errori possibili durante l'importazione dei file DICOM
+    // Servizio per interagire con i file DICOM
+    private let dicomService = DICOMService()
+    
     enum DICOMError: Error {
-        case fileNotFound       // Il file o la cartella non esistono
-        case invalidData        // Dati corrotti o file non valido
-        case importFailed(String) // Errore generico con messaggio
-        case unsupportedFormat  // Formato DICOM non supportato
+        case fileNotFound
+        case invalidData
+        case importFailed(String)
+        case unsupportedFormat
     }
     
-    /*
-     Importa file DICOM da una cartella selezionata dall'utente.
-     @param url Percorso della cartella contenente i file DICOM
-     @return Restituisce la serie DICOM importata
-     */
     func importDICOMFromDirectory(_ url: URL) async throws -> DICOMSeries {
         print("Importazione da: \(url.path)")
         
@@ -35,14 +26,13 @@ class DICOMManager: ObservableObject {
             throw DICOMError.fileNotFound
         }
         
-        // Recupera tutti i file presenti nella cartella
+        // Recupera tutti i file nella cartella
         let fileURLs = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
         
-        // Filtra solo i file con estensione .dcm (DICOM)
+        // Filtra solo i file DICOM
         let dicomFiles = fileURLs.filter { $0.pathExtension.lowercased() == "dcm" }
         let sortedDicomFiles = dicomFiles.sorted { $0.lastPathComponent < $1.lastPathComponent }
         
-        // Se non ci sono file DICOM validi, restituisce un errore
         if sortedDicomFiles.isEmpty {
             throw DICOMError.fileNotFound
         }
@@ -51,28 +41,65 @@ class DICOMManager: ObservableObject {
         return try await readDICOMFiles(from: sortedDicomFiles)
     }
     
-    /*
-     Legge e analizza i file DICOM, creando una serie con le immagini estratte.
-     @param files Array di URL dei file DICOM
-     @return Serie DICOM contenente le immagini elaborate
-     */
     private func readDICOMFiles(from files: [URL]) async throws -> DICOMSeries {
+        // Per il debug, stampa i metadati del primo file
+        if let firstFile = files.first {
+            print("Debug metadati DICOM del primo file:")
+            dicomService.printAllTags(from: firstFile.path)
+        }
         
-        // Crea un nuovo identificatore per il paziente
-        let patientID = UUID()
+        // Leggi i metadati della serie dal primo file
+        guard let firstFile = files.first,
+              let metadata = try? dicomService.readMetadata(from: firstFile.path) else {
+            throw DICOMError.invalidData
+        }
         
-        // Inizializza una nuova serie DICOM con dati di base (TODO: )
+        print("❤️❤️❤️❤️❤️ - ", metadata)
+        
+        // Estrai le informazioni di serie
+        let seriesInstanceUID = metadata["SeriesInstanceUID"] as? String ?? UUID().uuidString
+        let seriesDescription = metadata["SeriesDescription"] as? String ?? "Imported DICOM Series"
+        let modality = metadata["Modality"] as? String ?? "Unknown"
+        // Converti data studio se presente
+        var studyDate = Date()
+        if let dateString = metadata["StudyDate"] as? String, dateString.count == 8 {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyyMMdd"
+            if let date = formatter.date(from: dateString) {
+                studyDate = date
+            }
+        }
+        
+        // Estrai ID paziente o genera un nuovo UUID
+        let patientIDString = metadata["PatientID"] as? String
+        let patientID = UUID() // Per mantenere compatibilità con il tuo modello
+        
+        // Estrai informazioni dell'orientamento dell'immagine se disponibili
+        var imageOrientation: [Double] = [1, 0, 0, 0, 1, 0] // Default
+        if let orientationArray = metadata["ImageOrientation"] as? [NSNumber] {
+            imageOrientation = orientationArray.map { $0.doubleValue }
+        }
+        
+        // Estrai posizione dell'immagine se disponibile
+        var imagePosition: [Double] = [0, 0, 0] // Default
+        if let posX = (metadata["ImagePositionX"] as? String).flatMap(Double.init),
+           let posY = (metadata["ImagePositionY"] as? String).flatMap(Double.init),
+           let posZ = (metadata["ImagePositionZ"] as? String).flatMap(Double.init) {
+            imagePosition = [posX, posY, posZ]
+        }
+        
+        // Crea una nuova serie DICOM con i metadati estratti
         var series = DICOMSeries(
             id: UUID(),
-            seriesInstanceUID: UUID().uuidString,
-            seriesDescription: "Imported CT Series",
-            modality: "CT",
-            studyDate: Date(),
+            seriesInstanceUID: seriesInstanceUID,
+            seriesDescription: seriesDescription,
+            modality: modality,
+            studyDate: studyDate,
             patientID: patientID,
-            seriesNumber: 1,
-            institutionName: "Imported Hospital",
-            imageOrientation: [1, 0, 0, 0, 1, 0], // Direzione standard
-            imagePosition: [0, 0, 0] // Posizione iniziale
+            seriesNumber: 1, // Default
+            institutionName: metadata["InstitutionName"] as? String ?? "Unknown",
+            imageOrientation: imageOrientation,
+            imagePosition: imagePosition
         )
         
         var images: [DICOMImage] = []
@@ -80,29 +107,42 @@ class DICOMManager: ObservableObject {
         // Itera su tutti i file DICOM trovati nella cartella
         for (i, fileURL) in files.enumerated() {
             do {
-                // Carica i dati binari del file DICOM
-                let fileData = try Data(contentsOf: fileURL)
+                // Leggi metadati specifici dell'immagine
+                let imageMetadata = dicomService.readMetadata(from: fileURL.path)
                 
-                // Verifica che il file abbia almeno 132 byte per contenere un header DICOM (i metadati)
-                let headerSize = 132
-                guard fileData.count > headerSize else { continue }
+                // Ottieni i dati dei pixel
+                guard let pixelInfo = dicomService.getPixelData(from: fileURL.path) else {
+                    print("Impossibile ottenere i dati dei pixel per \(fileURL.lastPathComponent)")
+                    continue
+                }
                 
-                // Estrae i dati dei pixel (TODO: semplificato, in un'app reale servirebbe una libreria DICOM)
-                let pixelData = fileData.dropFirst(headerSize)
+                // Estrai la spaziatura dei pixel (pixel spacing)
+                let pixelSpacingX = (imageMetadata["PixelSpacingX"] as? String).flatMap(Double.init) ?? 1.0
+                let pixelSpacingY = (imageMetadata["PixelSpacingY"] as? String).flatMap(Double.init) ?? 1.0
                 
-                // TODO: Crea un'istanza di immagine DICOM con dati di base
+                // Estrai posizione della slice
+                let sliceLocation = (imageMetadata["SliceLocation"] as? String).flatMap(Double.init) ?? Double(i) * 2.0
+                
+                // Estrai numero di istanza
+                let instanceNumber = (imageMetadata["InstanceNumber"] as? String).flatMap(Int.init) ?? (i + 1)
+                
+                // Estrai valori di finestra (window center/width)
+                let windowCenter = (imageMetadata["WindowCenter"] as? String).flatMap(Double.init) ?? 40
+                let windowWidth = (imageMetadata["WindowWidth"] as? String).flatMap(Double.init) ?? 400
+                
+                // Crea un'istanza di immagine DICOM con i dati estratti
                 let image = DICOMImage(
                     id: UUID(),
-                    pixelData: pixelData,
-                    rows: 512, // Dimensioni predefinite dell'immagine
-                    columns: 512,
-                    bitsAllocated: 16, // Profondità dei bit
-                    pixelSpacing: (0.5, 0.5), // Spaziatura tra pixel
-                    sliceLocation: Double(i) * 2.0, // Posizione della slice lungo l'asse Z
-                    instanceNumber: i + 1, // Numero progressivo dell'immagine
-                    metadata: ["SeriesInstanceUID": series.seriesInstanceUID],
-                    windowCenter: 40, // Valori di finestra per il contrasto
-                    windowWidth: 400
+                    pixelData: pixelInfo.pixelData,
+                    rows: pixelInfo.rows,
+                    columns: pixelInfo.columns,
+                    bitsAllocated: pixelInfo.bitsAllocated,
+                    pixelSpacing: (pixelSpacingX, pixelSpacingY),
+                    sliceLocation: sliceLocation,
+                    instanceNumber: instanceNumber,
+                    metadata: ["SeriesInstanceUID": seriesInstanceUID],
+                    windowCenter: windowCenter,
+                    windowWidth: windowWidth
                 )
                 
                 // Aggiunge l'immagine alla serie
@@ -117,34 +157,38 @@ class DICOMManager: ObservableObject {
             throw DICOMError.importFailed("Nessuna immagine DICOM valida trovata")
         }
         
+        // Ordina le immagini in base alla posizione della slice
+        images.sort { $0.sliceLocation < $1.sliceLocation }
+        
         // Assegna le immagini alla serie
         series.images = images
         
-        // Crea un paziente di esempio (TODO: in un'app reale, i dati verrebbero estratti dai file DICOM)
+        // Estrai il nome del paziente dai metadati
+        let patientName = metadata["PatientName"] as? String ?? "Paziente Importato"
+        
+        // Estrai data di nascita se presente, altrimenti usa un valore predefinito
+        var dateOfBirth = Calendar.current.date(byAdding: .year, value: -60, to: Date())!
+        
+        // Crea un paziente con i dati estratti
         let patient = Patient(
-            name: "Paziente Importato",
-            dateOfBirth: Calendar.current.date(byAdding: .year, value: -60, to: Date())!, // Paziente fittizio 60 anni
-            medicalRecordNumber: "MRN12345",
-            gender: .male
+            name: patientName,
+            dateOfBirth: dateOfBirth,
+            medicalRecordNumber: patientIDString ?? "MRN12345",
+            gender: .male  // Default, dovrebbe essere estratto dai metadati DICOM
         )
         
         // Aggiorna la UI con i nuovi dati DICOM
-        let seriesCopy = series // Crea una copia di `series`
-
+        let seriesCopy = series
+        
         await MainActor.run {
             self.patients.append(patient)
             self.currentPatient = patient
-            self.currentSeries = seriesCopy // Usa la copia invece della variabile originale (perchè l'accesso a variabili in contesti concorrenti è diventato più restrittivo)
+            self.currentSeries = seriesCopy
         }
         
         return series
     }
     
-    /*
-     Genera una rappresentazione 3D della serie DICOM.
-     @param series La serie DICOM da trasformare in modello 3D
-     @return Un oggetto Volume opzionale
-     */
     func createVolumeFromSeries(_ series: DICOMSeries) -> Volume? {
         return Volume(from: series)
     }

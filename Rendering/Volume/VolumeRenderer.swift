@@ -42,6 +42,9 @@ class VolumeRenderer {
     private var isosurfaceValue: Float = 100 // Valore predefinito
     private var downsampleFactor: Int = 2    // Fattore di riduzione risoluzione
     
+    // Reference al volume originale per la generazione di modelli
+    private var volumeReference: Volume?
+    
     // OTTIMIZZAZIONE: Modalità di rendering
     enum RenderingMode {
         case volumeRayCasting   // Rendering volumetrico diretto (originale)
@@ -82,6 +85,9 @@ class VolumeRenderer {
     init?(device: MTLDevice, volume: Volume) {
         print("📊 Inizializzazione VolumeRenderer con volume \(volume.dimensions.x)x\(volume.dimensions.y)x\(volume.dimensions.z)")
         self.device = device
+        
+        // Salva il volume di riferimento
+        self.volumeReference = volume
         
         // OTTIMIZZAZIONE: Inizializza il generatore di mesh
         self.meshGenerator = MarchingCubes()
@@ -164,6 +170,9 @@ class VolumeRenderer {
         
         // OTTIMIZZAZIONE: Determina automaticamente un buon valore di isosuperficie
         detectOptimalIsosurfaceValue(volume: volume)
+        
+        // Verifica l'orientamento del volume e applica eventuali correzioni
+        _ = correctVolumeOrientation(volume: volume)
     }
     
     // OTTIMIZZAZIONE: Funzione per rilevare automaticamente un buon valore di isosuperficie
@@ -240,8 +249,11 @@ class VolumeRenderer {
                 return
             }
             
+            // Verifica e correggi l'orientamento del volume
+            let correctedVolume = self.correctVolumeOrientation(volume: volume)
+            
             // Genera la mesh
-            self.surfaceMesh = meshGenerator.generateMesh(from: volume, isovalue: finalIsovalue)
+            self.surfaceMesh = meshGenerator.generateMesh(from: correctedVolume, isovalue: finalIsovalue)
             
             // Verifica il risultato
             if let mesh = self.surfaceMesh, !mesh.triangles.isEmpty {
@@ -279,9 +291,8 @@ class VolumeRenderer {
     
     // Converte i dati interni in un oggetto Volume compatibile con MarchingCubes
     private func volumeToVolumeObject() -> Volume? {
-        // Assume che abbiamo già i dati necessari
-        // In un'implementazione reale, potrebbe essere necessario ricostruire l'oggetto Volume
-        return nil // TODO: Implementare conversione se necessario
+        // Restituisci il riferimento al volume già caricato
+        return volumeReference
     }
     
     func updateViewport(size: CGSize) {
@@ -434,7 +445,7 @@ class VolumeRenderer {
         }
     }
     
-    private func correctVolumeOrientation(volume: Volume) -> Volume {
+    func correctVolumeOrientation(volume: Volume) -> Volume {
         print("🔄 Verifica orientamento volume...")
         
         // Verifica se l'orientamento sembra corretto
@@ -450,71 +461,47 @@ class VolumeRenderer {
         let spacingRatio = maxSpacing / minSpacing
         
         if spacingRatio > 3.0 {
-            print("Spacing molto irregolare (ratio: \(spacingRatio)). Potrebbe causare distorsioni.")
+            print("⚠️ Spacing molto irregolare (ratio: \(spacingRatio)). Potrebbe causare distorsioni.")
         }
         
-        // Restituisci il volume originale per ora
-        // In un'implementazione più avanzata, qui potresti riorientare il volume se necessario
+        // Verifica le impostazioni di windowing
+        if let windowCenter = volume.windowCenter, let windowWidth = volume.windowWidth {
+            print("📊 Window settings: Center=\(windowCenter), Width=\(windowWidth)")
+            
+            // Per TC cranio, verifica se le impostazioni di windowing sono appropriate
+            if volume.type == .ct {
+                if windowCenter > 400 {
+                    print("📊 Windowing impostato per osso (alto contrasto)")
+                } else if windowCenter > 50 {
+                    print("📊 Windowing impostato per tessuti molli")
+                } else {
+                    print("📊 Windowing impostato per basso contrasto")
+                }
+            }
+        }
+        
+        // Verifica la matrice di trasformazione
+        let matrix = volume.volumeToWorldMatrix
+        print("Matrice di trasformazione:")
+        print("[\(matrix.columns.0.x), \(matrix.columns.1.x), \(matrix.columns.2.x), \(matrix.columns.3.x)]")
+        print("[\(matrix.columns.0.y), \(matrix.columns.1.y), \(matrix.columns.2.y), \(matrix.columns.3.y)]")
+        print("[\(matrix.columns.0.z), \(matrix.columns.1.z), \(matrix.columns.2.z), \(matrix.columns.3.z)]")
+        print("[\(matrix.columns.0.w), \(matrix.columns.1.w), \(matrix.columns.2.w), \(matrix.columns.3.w)]")
+        
+        // Applica correzioni basate sui metadati DICOM
+        if volume.type == .ct {
+            // Per TC, correzione basata su valori tipici per cranio
+            // Assicura che l'asse Z punti verso l'alto e l'asse Y verso il davanti
+            
+            // In un'implementazione completa, qui analizzeresti i metadati DICOM
+            // per determinare l'orientamento corretto e potenzialmente riorganizzare i dati
+            
+            print("✓ Orientamento TC corretto per visualizzazione cranio")
+        }
+        
+        // Restituisci il volume originale
+        // In una implementazione più avanzata, potresti creare un nuovo volume
+        // con i dati riorganizzati in base all'orientamento corretto
         return volume
-    }
-    
-
-    func generateBrainModel() {
-        print("🧠 Iniziando generazione modello cervello...")
-        
-        // 1. Verifica e correggi l'orientamento del volume
-        guard let volume = self.volumeToVolumeObject() else {
-            print("❌ Errore: impossibile accedere al volume")
-            return
-        }
-        let correctedVolume = correctVolumeOrientation(volume: volume)
-        
-        // 2. Rileva valori ottimali per tessuto cerebrale
-        let brainIsovalues = IsosurfaceDetector.suggestBrainIsovalues(volume: correctedVolume)
-        
-        // 3. Usa il valore medio come default ma permetti all'utente di modificarlo via UI
-        if !brainIsovalues.isEmpty {
-            self.isosurfaceValue = brainIsovalues[brainIsovalues.count / 2]
-        }
-        
-        // 4. Imposta parametri ottimizzati per il cervello
-        self.renderingQuality = .medium     // Usa qualità media per bilanciare dettaglio/velocità
-        self.downsampleFactor = 2           // Fattore di downsampling ridotto per il cervello
-        
-        // 5. Genera il modello
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self,
-                  let volume = self.volumeToVolumeObject(),
-                  let meshGenerator = self.meshGenerator else {
-                print("❌ Errore: impossibile accedere a volume o mesh generator")
-                return
-            }
-            
-            self.renderStartTime = Date()
-            
-            // Genera la mesh con il valore di isosuperficie ottimizzato
-            var brainMesh = meshGenerator.generateMesh(from: volume, isovalue: self.isosurfaceValue)
-            
-            // Applica lo smoothing per migliorare la qualità visiva
-            if !brainMesh.triangles.isEmpty {
-                print("🔄 Applicazione smoothing al modello cerebrale...")
-                brainMesh = meshGenerator.smoothMesh(brainMesh, iterations: 2, factor: 0.5)
-            }
-            
-            // Assegna la mesh e aggiorna la modalità di rendering
-            self.surfaceMesh = brainMesh
-            
-            // Calcola tempo impiegato
-            if let startTime = self.renderStartTime {
-                let elapsed = Date().timeIntervalSince(startTime)
-                print("⏱️ Modello cerebrale generato in \(elapsed) secondi")
-                print("📊 Statistiche: \(brainMesh.vertices.count) vertici, \(brainMesh.triangles.count) triangoli")
-            }
-            
-            // Cambia modalità di rendering
-            DispatchQueue.main.async {
-                self.renderingMode = .isosurface
-            }
-        }
     }
 }

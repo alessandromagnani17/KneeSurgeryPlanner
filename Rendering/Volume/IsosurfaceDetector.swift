@@ -169,106 +169,70 @@ class IsosurfaceDetector {
     
     // Suggerisce un isovalue ottimale per un tipo specifico di tessuto
     static func suggestIsovalueForTissueType(volume: Volume, tissueType: TissueType) -> Float {
-        let isovalues = detectOptimalIsovalues(volume: volume, fullAnalysis: false)
-        
-        switch tissueType {
-        case .skin:
-            return volume.type == .ct ? -200 : isovalues[0]
-        case .bone:
-            return volume.type == .ct ? 400 : isovalues.last ?? isovalues[0]
-        case .brain:
-            return volume.type == .ct ? 40 : isovalues[1]
-        case .softTissue:
-            return volume.type == .ct ? 100 : isovalues[1]
-        case .auto:
-            // Restituisce il valore più adatto in base al tipo di volume
-            if volume.type == .ct {
-                return 100  // Valore intermedio per soft tissue in CT
+        // Per TC, usa valori Hounsfield calibrati basati sui metadati se disponibili
+        if volume.type == .ct {
+            // Ottiene il range di valori reali dal volume se è disponibile il windowing
+            var adjustedValues: [Float] = [400.0] // Default per osso
+            
+            if let windowCenter = volume.windowCenter, let windowWidth = volume.windowWidth {
+                print("📊 Usando WindowCenter: \(windowCenter), WindowWidth: \(windowWidth) per calcolo isovalori")
+                
+                // Calcola range dei valori basato sul windowing
+                let lowerBound = Float(windowCenter - windowWidth/2)
+                let upperBound = Float(windowCenter + windowWidth/2)
+                
+                // Valori consigliati basati sul range di windowing
+                switch tissueType {
+                case .skin:
+                    return max(-200.0, lowerBound + (upperBound - lowerBound) * 0.2)
+                case .bone:
+                    return max(300.0, upperBound - (upperBound - lowerBound) * 0.2)
+                case .brain:
+                    return Float(windowCenter) - 100.0  // Leggermente più scuro del centro
+                case .softTissue:
+                    return Float(windowCenter)
+                case .auto:
+                    // Per cranio, l'osso è spesso l'elemento più interessante
+                    if windowCenter > 200 {  // Windowing per osso
+                        return max(300.0, Float(windowCenter) - Float(windowWidth) * 0.2)
+                    } else {  // Windowing per tessuti molli
+                        return Float(windowCenter)
+                    }
+                }
             } else {
+                // Valori default per TC se metadati non disponibili
+                switch tissueType {
+                case .skin:
+                    return -200.0  // Circa -200 HU per pelle/grasso
+                case .bone:
+                    return 400.0   // Circa 400+ HU per osso
+                case .brain:
+                    return 40.0    // Circa 40 HU per materia bianca
+                case .softTissue:
+                    return 100.0   // Circa 100 HU per tessuti molli
+                case .auto:
+                    // Per il cranio, l'osso è spesso l'elemento più interessante
+                    return 350.0   // Valore che funziona bene per visualizzare il cranio
+                }
+            }
+        } else {
+            // Per MRI, usa l'implementazione esistente basata sui percentili
+            let isovalues = detectOptimalIsovalues(volume: volume, fullAnalysis: false)
+            
+            switch tissueType {
+            case .skin:
+                return isovalues.count > 0 ? isovalues[0] : 0.0
+            case .bone:
+                return isovalues.count > 0 ? isovalues.last ?? isovalues[0] : 0.0
+            case .brain:
+                return isovalues.count > 1 ? isovalues[1] : isovalues[0]
+            case .softTissue:
+                return isovalues.count > 1 ? isovalues[1] : isovalues[0]
+            case .auto:
                 // Per MRI usa il percentile 50
                 return isovalues.count > 1 ? isovalues[1] : isovalues[0]
             }
         }
-    }
-    
-    static func suggestBrainIsovalues(volume: Volume) -> [Float] {
-        print("🧠 Rilevamento valori ottimali per tessuto cerebrale...")
-        
-        // Campiona il volume per creare un istogramma
-        let sampleRate = 8 // Campiona ogni 8 voxel per velocità
-        var values: [Float] = []
-        let width = volume.dimensions.x
-        let height = volume.dimensions.y
-        let depth = volume.dimensions.z
-        
-        // Campionamento più denso nella regione centrale (dove è più probabile ci sia il cervello)
-        let centerX = width / 2
-        let centerY = height / 2
-        let centerZ = depth / 2
-        let radius = min(width, min(height, depth)) / 3
-        
-        print("📊 Campionamento volume cerebrale...")
-        
-        for z in stride(from: 0, to: depth, by: sampleRate) {
-            for y in stride(from: 0, to: height, by: sampleRate) {
-                for x in stride(from: 0, to: width, by: sampleRate) {
-                    // Calcola distanza dal centro
-                    let dx = x - centerX
-                    let dy = y - centerY
-                    let dz = z - centerZ
-                    let distanceSquared = dx*dx + dy*dy + dz*dz
-                    
-                    // Campiona più densamente vicino al centro
-                    if distanceSquared <= radius*radius || Int.random(in: 0...10) == 0 {
-                        if let value = volume.voxelValue(at: SIMD3<Int>(x, y, z)) {
-                            values.append(Float(value))
-                        }
-                    }
-                }
-            }
-        }
-        
-        guard !values.isEmpty else {
-            print("⚠️ Nessun valore trovato nel campionamento")
-            return [0.0]
-        }
-        
-        // Ordina i valori e trova percentili significativi
-        values.sort()
-        
-        let minVal = values.first!
-        let maxVal = values.last!
-        let p5 = values[Int(Float(values.count) * 0.05)]
-        let p25 = values[Int(Float(values.count) * 0.25)]
-        let p50 = values[Int(Float(values.count) * 0.5)]
-        let p75 = values[Int(Float(values.count) * 0.75)]
-        let p95 = values[Int(Float(values.count) * 0.95)]
-        
-        print("📊 Analisi valori cerebrali:")
-        print("  Range: \(minVal) - \(maxVal)")
-        print("  Percentili: P5=\(p5), P25=\(p25), P50=\(p50), P75=\(p75), P95=\(p95)")
-        
-        // Selezione valori specifici per il cervello basati sul tipo di scansione
-        var brainIsovalues: [Float] = []
-        
-        if volume.type == .ct {
-            // Per TC cerebrale:
-            // ~0-20 HU: Liquido cerebrospinale
-            // ~20-40 HU: Materia grigia
-            // ~40-60 HU: Materia bianca
-            // Solitamente usiamo valori tra 30-50 per il tessuto cerebrale in TC
-            brainIsovalues = [30, 45, 60]
-            print("🧠 TC cerebrale rilevata: valori suggeriti = \(brainIsovalues)")
-        } else {
-            // Per RM, i valori dipendono fortemente dalla sequenza
-            // Usiamo un approccio basato sui percentili
-            // Escludiamo valori bassi che sono spesso rumore di fondo
-            let threshold = p25 + (p50 - p25) * 0.5
-            brainIsovalues = [threshold, p50, p75]
-            print("🧠 RM cerebrale rilevata: valori suggeriti = \(brainIsovalues)")
-        }
-        
-        return brainIsovalues
     }
     
     // Tipi di tessuto che possono essere visualizzati

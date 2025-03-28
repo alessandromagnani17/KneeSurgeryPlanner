@@ -626,6 +626,7 @@ class MarchingCubes {
         return Mesh(vertices: vertices, triangles: triangles)
     }
     
+
     // Funzione helper per estrarre il valore di un voxel
     private func getVoxelValue(_ volume: Volume, _ x: Int, _ y: Int, _ z: Int) -> Float {
         guard x >= 0 && x < volume.dimensions.x &&
@@ -635,23 +636,49 @@ class MarchingCubes {
             return 0.0
         }
         
-        // Assicura che il valore sia nel range di UInt16 (0 - 65535)
-        let clampedValue = UInt16(clamping: value)
-        
-        // Converte il valore da UInt16 a Int16 per gestire i voxel con segno (DICOM)
-        let signedValue = Float(Int16(bitPattern: clampedValue))
-        
-        // Stampa di debug per i voxel centrali
-        if x == 256 && y == 256 && z == 113 {
-            print("🔍 Voxel[\(x), \(y), \(z)]: \(signedValue) (raw: \(value))")
+        // Per TC, usa direttamente il valore Hounsfield se disponibile
+        if volume.type == .ct {
+            if let hounsfield = volume.hounsfieldValue(at: SIMD3<Int>(x, y, z)) {
+                // Stampa di debug per i voxel centrali
+                if x == 256 && y == 256 && z == 113 {
+                    print("🔍 Voxel[\(x), \(y), \(z)]: \(hounsfield) HU (raw: \(value))")
+                }
+                return hounsfield
+            }
+            
+            // Fallback se hounsfieldValue non è disponibile
+            // Assicura che il valore sia nel range di UInt16 (0 - 65535)
+            let clampedValue = UInt16(clamping: value)
+            
+            // Converti il valore da UInt16 a Int16 per gestire i voxel con segno (DICOM)
+            let signedValue = Int16(bitPattern: clampedValue)
+            
+            // Applica la trasformazione usando RescaleSlope e RescaleIntercept dai metadati
+            let rescaleSlope = Float(volume.rescaleSlope ?? 1.0)
+            let rescaleIntercept = Float(volume.rescaleIntercept ?? -1024.0)
+            
+            let hounsfield = Float(signedValue) * rescaleSlope + rescaleIntercept
+            
+            // Stampa di debug per i voxel centrali
+            if x == 256 && y == 256 && z == 113 {
+                print("🔍 Voxel[\(x), \(y), \(z)]: \(hounsfield) HU (raw: \(value))")
+            }
+            
+            return hounsfield
+        } else {
+            // Per MRI o altre modalità, restituisci il valore così com'è
+            let clampedValue = UInt16(clamping: value)
+            let signedValue = Float(Int16(bitPattern: clampedValue))
+            
+            // Stampa di debug per i voxel centrali
+            if x == 256 && y == 256 && z == 113 {
+                print("🔍 Voxel[\(x), \(y), \(z)]: \(signedValue) (raw: \(value))")
+            }
+            
+            return signedValue
         }
-        
-        return signedValue
     }
 
-
-
-    
     
     
     // Funzione helper per aggiungere un vertice ed evitare duplicati

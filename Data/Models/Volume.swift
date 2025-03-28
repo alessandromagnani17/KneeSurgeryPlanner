@@ -9,6 +9,8 @@
  - bitsPerVoxel: Numero di bit per voxel (8, 16, 32 bit)
  - type: Tipo di volume (CT o MRI)
  - volumeToWorldMatrix: Matrice di trasformazione 3D (dal volume allo spazio del mondo)
+ - windowCenter, windowWidth: Parametri di windowing per TC
+ - rescaleSlope, rescaleIntercept: Parametri di trasformazione per TC
 
  Funzionalità:
  - Crea un volume 3D a partire da una serie di immagini DICOM
@@ -38,6 +40,12 @@ struct Volume {
     
     // Matrice di trasformazione dal volume allo spazio del mondo
     var volumeToWorldMatrix: simd_float4x4
+    
+    // Parametri DICOM specifici
+    let windowCenter: Double?          // Centro della finestra per TC
+    let windowWidth: Double?           // Ampiezza della finestra per TC
+    let rescaleSlope: Double?          // Pendenza di riscalaggio per TC
+    let rescaleIntercept: Double?      // Intercetta di riscalaggio per TC
     
     // Inizializzatore per creare un volume a partire da una serie DICOM
     init?(from series: DICOMSeries) {
@@ -128,18 +136,50 @@ struct Volume {
             totalDataSize += min(image.pixelData.count, expectedSliceSize)
         }
         
+        // Usa i valori di WindowCenter e WindowWidth dai metadati
+        self.windowCenter = firstImage.windowCenter
+        self.windowWidth = firstImage.windowWidth
+        
+        // Parametri di scala per convertire in unità Hounsfield per TC
+        self.rescaleSlope = firstImage.rescaleSlope
+        self.rescaleIntercept = firstImage.rescaleIntercept
+        
         // Inizializza le proprietà del volume
         self.dimensions = SIMD3<Int>(columns, rows, sliceCount)
         self.spacing = SIMD3<Float>(Float(colSpacing), Float(rowSpacing), Float(sliceSpacing))
-        self.origin = SIMD3<Float>(0, 0, 0)  // Origine predefinita (da calcolare dai metadati DICOM)
         self.data = volumeData
         self.bitsPerVoxel = firstImage.bitsAllocated
         self.type = series.modality == "CT" ? .ct : .mri
         
-        // Calcola la matrice di trasformazione dallo spazio del volume allo spazio del mondo
-        self.volumeToWorldMatrix = simd_float4x4(diagonal: SIMD4<Float>(
-            spacing.x, spacing.y, spacing.z, 1.0
-        ))
+        // Determina l'origine e l'orientamento del volume
+        if let imagePosition = firstImage.imagePositionPatient,
+           let imageOrientation = firstImage.imageOrientationPatient {
+            // Estrai la posizione dell'immagine (punto in alto a sinistra della prima slice)
+            let position = SIMD3<Float>(Float(imagePosition.0), Float(imagePosition.1), Float(imagePosition.2))
+            
+            // Estrai l'orientamento dell'immagine (prime due righe della matrice di orientamento)
+            let rowDirectionCosines = SIMD3<Float>(Float(imageOrientation.0), Float(imageOrientation.1), Float(imageOrientation.2))
+            let colDirectionCosines = SIMD3<Float>(Float(imageOrientation.3), Float(imageOrientation.4), Float(imageOrientation.5))
+            
+            // Calcola il vettore di direzione della slice come prodotto vettoriale normalizzato
+            let sliceDirection = normalize(cross(rowDirectionCosines, colDirectionCosines))
+            
+            // Costruisci la matrice di orientamento
+            var orientationMatrix = simd_float4x4(diagonal: SIMD4<Float>(1, 1, 1, 1))
+            orientationMatrix.columns.0 = SIMD4<Float>(rowDirectionCosines * spacing.x, 0)
+            orientationMatrix.columns.1 = SIMD4<Float>(colDirectionCosines * spacing.y, 0)
+            orientationMatrix.columns.2 = SIMD4<Float>(sliceDirection * spacing.z, 0)
+            orientationMatrix.columns.3 = SIMD4<Float>(position, 1)
+            
+            self.origin = position
+            self.volumeToWorldMatrix = orientationMatrix
+        } else {
+            // Fallback se i metadati di orientamento non sono disponibili
+            self.origin = SIMD3<Float>(0, 0, 0)
+            self.volumeToWorldMatrix = simd_float4x4(diagonal: SIMD4<Float>(
+                spacing.x, spacing.y, spacing.z, 1.0
+            ))
+        }
         
         // Debug: Analizza alcuni valori dal volume
         if self.bitsPerVoxel == 16 && !volumeData.isEmpty {
@@ -170,9 +210,58 @@ struct Volume {
                     
                     let avg = count > 0 ? (sum / count) : 0
                     print("ℹ️ Statistiche prima slice - Min: \(min), Max: \(max), Avg: \(avg)")
+                    
+                    // Per TC, mostra anche i valori in unità Hounsfield
+                    if self.type == .ct && self.rescaleSlope != nil && self.rescaleIntercept != nil {
+                        let minHU = Double(min) * (self.rescaleSlope ?? 1.0) + (self.rescaleIntercept ?? 0.0)
+                        let maxHU = Double(max) * (self.rescaleSlope ?? 1.0) + (self.rescaleIntercept ?? 0.0)
+                        print("ℹ️ Range Hounsfield stimato: \(minHU) HU - \(maxHU) HU")
+                    }
                 }
             }
         }
+    }
+    
+    // Costruttore specifico per inizializzazione da metadati DICOM
+    init?(columns: Int, rows: Int, slices: Int, bitsStored: Int,
+          windowCenter: Double?, windowWidth: Double?,
+          sliceLocation: Double, modality: String, spacing: SIMD3<Float>? = nil) {
+        
+        // Dimensioni del volume
+        self.dimensions = SIMD3<Int>(columns, rows, slices)
+        
+        // Parametri di windowing
+        self.windowCenter = windowCenter
+        self.windowWidth = windowWidth
+        
+        // Usa valori di rescale tipici per TC se non forniti
+        self.rescaleSlope = 1.0
+        self.rescaleIntercept = -1024.0 // Valore tipico per TC
+        
+        // Determina il tipo di volume
+        self.type = modality == "CT" ? .ct : .mri
+        
+        // Usa spacing fornito o valore di default
+        if let providedSpacing = spacing {
+            self.spacing = providedSpacing
+        } else {
+            // Valori di default se non specificati
+            self.spacing = SIMD3<Float>(1.0, 1.0, 1.0)
+        }
+        
+        // Crea un buffer vuoto per i dati
+        self.bitsPerVoxel = bitsStored
+        let bytesPerVoxel = bitsStored / 8
+        let totalSize = columns * rows * slices * bytesPerVoxel
+        self.data = Data(count: totalSize)
+        
+        // Posizione di default
+        self.origin = SIMD3<Float>(0, 0, Float(sliceLocation))
+        
+        // Matrice di trasformazione di default
+        self.volumeToWorldMatrix = simd_float4x4(diagonal: SIMD4<Float>(
+            self.spacing.x, self.spacing.y, self.spacing.z, 1.0
+        ))
     }
     
     // Accedi al valore di un voxel in una posizione specifica
@@ -205,6 +294,23 @@ struct Volume {
         }
     }
     
+    // Funzione per ottenere il valore del voxel in unità Hounsfield (per TC)
+    func hounsfieldValue(at position: SIMD3<Int>) -> Float? {
+        guard let rawValue = voxelValue(at: position) else {
+            return nil
+        }
+        
+        if type == .ct {
+            // Converti in unità Hounsfield usando i parametri di rescale
+            let slope = Float(rescaleSlope ?? 1.0)
+            let intercept = Float(rescaleIntercept ?? -1024.0)
+            return Float(rawValue) * slope + intercept
+        } else {
+            // Per MRI o altre modalità, restituisci il valore così com'è
+            return Float(rawValue)
+        }
+    }
+    
     // Funzione di debug per stampare informazioni sul volume
     func printDebugInfo() {
         print("\n--- DEBUG VOLUME INFO ---")
@@ -213,6 +319,14 @@ struct Volume {
         print("Bits per voxel: \(bitsPerVoxel)")
         print("Volume data size: \(data.count) bytes")
         print("Expected data size: \(dimensions.x * dimensions.y * dimensions.z * (bitsPerVoxel / 8)) bytes")
+        
+        if let windowCenter = windowCenter, let windowWidth = windowWidth {
+            print("Window settings: Center=\(windowCenter), Width=\(windowWidth)")
+        }
+        
+        if let rescaleSlope = rescaleSlope, let rescaleIntercept = rescaleIntercept {
+            print("Rescale: Slope=\(rescaleSlope), Intercept=\(rescaleIntercept)")
+        }
         
         if bitsPerVoxel == 16 {
             data.withUnsafeBytes { rawBuffer in
@@ -229,7 +343,13 @@ struct Volume {
                     for z in stride(from: 0, to: dimensions.z, by: max(1, dimensions.z / 5)) {
                         let idx = z * dimensions.x * dimensions.y + centerY * dimensions.x + centerX
                         if idx < int16Buffer.count {
-                            print("Center of slice \(z): \(int16Buffer[idx])")
+                            let raw = int16Buffer[idx]
+                            print("Center of slice \(z): \(raw)")
+                            
+                            if type == .ct && rescaleSlope != nil {
+                                let hu = Double(raw) * (rescaleSlope ?? 1.0) + (rescaleIntercept ?? 0.0)
+                                print("  HU value: \(hu)")
+                            }
                         }
                     }
                     

@@ -73,8 +73,61 @@ struct DICOMImage: Identifiable {
      In questo caso, i valori Hounsfield che vanno da 50 - 250 (cioè -200) fino a 50 + 250 (cioè 300) verranno visualizzati in modo dettagliato. I tessuti che rientrano in questo range (ad esempio i polmoni o altri tessuti molli) saranno più visibili, mentre valori molto bassi (come quelli dell'aria) o molto alti (come quelli delle ossa) potrebbero non essere visualizzati o apparire in modo sfocato.
      */
     let windowWidth: Double?
-
     
+    // Fattore di pendenza per la conversione in unità Hounsfield
+    // Tipicamente 1.0 per TC
+    let rescaleSlope: Double?
+    
+    // Intercetta per la conversione in unità Hounsfield
+    // Tipicamente -1024.0 per TC (0 = -1024 HU, quindi l'aria è a -1000 HU)
+    let rescaleIntercept: Double?
+    
+    // Vettore che rappresenta la posizione dell'immagine nello spazio 3D
+    // DICOM tag (0020,0032) Image Position Patient
+    let imagePositionPatient: (Double, Double, Double)?
+    
+    // Vettori che rappresentano l'orientamento dell'immagine nello spazio 3D
+    // DICOM tag (0020,0037) Image Orientation Patient
+    // Contiene 6 valori: (Row X, Row Y, Row Z, Col X, Col Y, Col Z)
+    let imageOrientationPatient: (Double, Double, Double, Double, Double, Double)?
+
+    // - Inizializzatore
+    init(id: UUID, pixelData: Data, rows: Int, columns: Int, bitsAllocated: Int,
+         pixelSpacing: (Double, Double), sliceLocation: Double, instanceNumber: Int,
+         metadata: [String: Any], windowCenter: Double? = nil, windowWidth: Double? = nil) {
+        self.id = id
+        self.pixelData = pixelData
+        self.rows = rows
+        self.columns = columns
+        self.bitsAllocated = bitsAllocated
+        self.pixelSpacing = pixelSpacing
+        self.sliceLocation = sliceLocation
+        self.instanceNumber = instanceNumber
+        self.metadata = metadata
+        self.windowCenter = windowCenter
+        self.windowWidth = windowWidth
+        
+        // Estrai valori di rescale dai metadati (se disponibili)
+        self.rescaleSlope = metadata["RescaleSlope"] as? Double ?? 1.0
+        self.rescaleIntercept = metadata["RescaleIntercept"] as? Double ?? -1024.0
+        
+        // Estrai posizione e orientamento dai metadati (se disponibili)
+        if let position = metadata["ImagePositionPatient"] as? [Double], position.count >= 3 {
+            self.imagePositionPatient = (position[0], position[1], position[2])
+        } else {
+            self.imagePositionPatient = nil
+        }
+        
+        if let orientation = metadata["ImageOrientationPatient"] as? [Double], orientation.count >= 6 {
+            self.imageOrientationPatient = (
+                orientation[0], orientation[1], orientation[2],
+                orientation[3], orientation[4], orientation[5]
+            )
+        } else {
+            self.imageOrientationPatient = nil
+        }
+    }
+
     // - Metodi
     // TODO: la funzione image non viene mai chiamata
     /*
@@ -177,8 +230,12 @@ struct DICOMImage: Identifiable {
 
         // Applica la formula di windowing a ogni pixel
         for i in 0..<length {
-            let value = Double(pixelBuffer[i])
-            let windowedValue = max(0, min(255, 255 * (value - lowerBound) / width))
+            // Converti il valore grezzo in unità Hounsfield se necessario
+            let rawValue = Double(pixelBuffer[i])
+            let hounsfield = rawValue * (rescaleSlope ?? 1.0) + (rescaleIntercept ?? 0.0)
+            
+            // Applica il windowing
+            let windowedValue = max(0, min(255, 255 * (hounsfield - lowerBound) / width))
             adjustedPixels[i] = UInt8(windowedValue)
         }
 
@@ -202,5 +259,26 @@ struct DICOMImage: Identifiable {
             shouldInterpolate: false,
             intent: .defaultIntent
         )
+    }
+    
+    // Ottiene il valore Hounsfield a una posizione specifica (x, y)
+    func hounsfieldValue(at x: Int, y: Int) -> Double? {
+        guard x >= 0, x < columns, y >= 0, y < rows, bitsAllocated == 16 else {
+            return nil
+        }
+        
+        let index = y * columns + x
+        let bytesPerPixel = 2 // 16 bit = 2 bytes
+        let byteIndex = index * bytesPerPixel
+        
+        guard byteIndex + 1 < pixelData.count else {
+            return nil
+        }
+        
+        let value = pixelData[byteIndex..<(byteIndex + 2)].withUnsafeBytes { $0.load(as: UInt16.self) }
+        let signedValue = Int16(bitPattern: value)
+        
+        // Converti in unità Hounsfield
+        return Double(signedValue) * (rescaleSlope ?? 1.0) + (rescaleIntercept ?? 0.0)
     }
 }
