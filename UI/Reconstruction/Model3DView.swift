@@ -21,10 +21,14 @@ struct Model3DView: View {
     // Gestisce i dati DICOM e fornisce metodi per convertirli in formato 3D
     @ObservedObject var dicomManager: DICOMManager
     
+    // Costanti per la posizione iniziale della telecamera
+    private let initialCameraPosition = SCNVector3(0, 0, 200)
+    private let initialCameraEulerAngles = SCNVector3(0, 0, 0)
+    
     // Queste variabili di stato gestiscono la visualizzazione 3D
     @State private var scene = SCNScene()                 // La scena 3D che contiene il modello
     @State private var cameraNode = SCNNode()             // Il nodo della telecamera per la view 3D
-    @State private var thresholdValue: Float = 100        // Valore di soglia per l'algoritmo Marching Cubes
+    @State private var thresholdValue: Float = 400        // Valore di soglia per l'algoritmo Marching Cubes
     @State private var scnView: SCNView?                  // Riferimento alla view SceneKit attuale
     
     // La struttura dell'interfaccia utente
@@ -80,7 +84,8 @@ struct Model3DView: View {
         camera.zNear = 1                      // Distanza minima visibile dalla telecamera
         camera.zFar = 1000                    // Distanza massima visibile dalla telecamera
         cameraNode.camera = camera
-        cameraNode.position = SCNVector3(0, 0, 200)  // Posiziona la telecamera a distanza dal modello
+        cameraNode.position = initialCameraPosition  // Posiziona la telecamera a distanza dal modello
+        cameraNode.eulerAngles = initialCameraEulerAngles
         scene.rootNode.addChildNode(cameraNode)      // Aggiunge la telecamera alla scena
         
         // Aggiunge luce ambientale per illuminare uniformemente il modello
@@ -140,12 +145,12 @@ struct Model3DView: View {
         SCNTransaction.begin()
         SCNTransaction.animationDuration = 0.5 // Durata dell'animazione in secondi
         
-        // Imposta la posizione e rotazione della telecamera di visualizzazione
-        let defaultPosition = SCNVector3(0, 0, 200)
-        let defaultOrientation = SCNQuaternion(0, 0, 0, 1) // Quaternione di identità (nessuna rotazione)
+        // Usa le stesse impostazioni di posizione definite nell'inizializzazione
+        scnView.pointOfView?.position = initialCameraPosition
         
-        scnView.pointOfView?.position = defaultPosition
-        scnView.pointOfView?.orientation = defaultOrientation
+        // Converti gli angoli di Eulero in un quaternione per l'orientamento
+        // In questo caso semplice (0,0,0) corrisponde a un quaternione identità (0,0,0,1)
+        scnView.pointOfView?.orientation = SCNQuaternion(0, 0, 0, 1)
         
         SCNTransaction.commit()
         
