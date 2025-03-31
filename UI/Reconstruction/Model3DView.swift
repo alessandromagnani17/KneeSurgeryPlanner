@@ -1,59 +1,60 @@
 import SwiftUI
 import SceneKit
 
-// Definizione delle modalità di disegno
+// MARK: - Enumerazioni e Strutture di Supporto
+
+/// Modalità di interazione con il disegno 3D
 enum DrawingMode {
-    case draw
-    case erase
-    case none
+    case draw   // Modalità disegno attiva
+    case erase  // Modalità cancellazione attiva
+    case none   // Interazione normale con il modello
 }
 
-// Struttura per memorizzare le linee disegnate
+/// Struttura per memorizzare le linee disegnate sul modello 3D
 struct DrawingLine: Identifiable {
     let id = UUID()
-    var nodes: [SCNNode]
-    var color: NSColor
-    var thickness: Float
+    var nodes: [SCNNode]      // Nodi SceneKit che compongono la linea
+    var color: NSColor        // Colore della linea
+    var thickness: Float      // Spessore della linea
 }
 
+/// Modalità di rendering del modello 3D
+enum RenderingMode {
+    case solid              // Rendering solido standard
+    case wireframe          // Solo wireframe
+    case solidWithWireframe // Solido con overlay wireframe
+}
+
+// MARK: - Vista Principale
 struct Model3DView: View {
-    // MARK: - Proprietà esistenti
+    // MARK: - Proprietà
     @ObservedObject var dicomManager: DICOMManager
     
+    // Configurazione camera
     private let initialCameraPosition = SCNVector3(0, 0, 200)
     private let initialCameraEulerAngles = SCNVector3(0, 0, 0)
     
+    // Stato della scena 3D
     @State private var scene = SCNScene()
     @State private var cameraNode = SCNNode()
     @State private var thresholdValue: Float = 400
     @State private var scnView: SCNView?
     @State private var renderingMode: RenderingMode = .solid
     
-    // MARK: - Nuove proprietà per il painter
+    // Stato del painter 3D
     @State private var drawingMode: DrawingMode = .none
     @State private var currentDrawingColor: NSColor = .red
     @State private var lineThickness: Float = 1.0
     @State private var drawingLines: [DrawingLine] = []
-    @State private var isDrawing = false
-    @State private var lastHitPosition: SCNVector3?
-    @State private var currentLineNodes: [SCNNode] = []
-    
-    enum RenderingMode {
-        case solid
-        case wireframe
-        case solidWithWireframe
-    }
     
     // MARK: - UI
     var body: some View {
         VStack {
-            // Barra dei controlli esistente + controlli del painter
+            // Controlli per il modello 3D
             HStack {
-                // Controlli esistenti
                 Text("Threshold: \(Int(thresholdValue))")
                 Slider(value: $thresholdValue, in: 0...1000)
                     .onChange(of: thresholdValue) { oldValue, newValue in
-                        print("📊 DEBUG: Threshold cambiato da \(oldValue) a \(newValue)")
                         updateModel()
                     }
                 
@@ -66,21 +67,19 @@ struct Model3DView: View {
                 }
                 .pickerStyle(MenuPickerStyle())
                 .frame(width: 120)
-                .onChange(of: renderingMode) { oldValue, newValue in
-                    print("🖌️ DEBUG: Modalità rendering cambiata da \(oldValue) a \(newValue)")
+                .onChange(of: renderingMode) { _, _ in
                     updateRenderingMode()
                 }
                 
                 Button("Reset Camera") {
-                    print("📷 DEBUG: Reset camera richiesto")
                     resetCamera()
                 }
             }
             .padding()
             
-            // Nuova barra per i controlli del painter
+            // Controlli per il painter 3D
             HStack {
-                // Selezione modalità
+                // Selezione modalità disegno
                 Picker("Mode", selection: $drawingMode) {
                     Text("View").tag(DrawingMode.none)
                     Text("Draw").tag(DrawingMode.draw)
@@ -102,13 +101,12 @@ struct Model3DView: View {
                     .frame(width: 120)
                     .disabled(drawingMode != .draw)
                 
-                // Pulsante per cancellare tutte le linee
+                // Pulsanti di controllo disegno
                 Button("Clear All") {
                     clearAllDrawings()
                 }
                 .disabled(drawingLines.isEmpty)
                 
-                // Pulsante per annullare l'ultima linea
                 Button("Undo") {
                     undoLastDrawing()
                 }
@@ -117,7 +115,7 @@ struct Model3DView: View {
             .padding(.horizontal)
             
             // Area principale che mostra il modello 3D
-            GeometryReader { geometry in
+            GeometryReader { _ in
                 SceneKitDrawingView(
                     scene: scene,
                     allowsCameraControl: true,
@@ -128,11 +126,9 @@ struct Model3DView: View {
                     drawingLines: $drawingLines,
                     onSceneViewCreated: { view in
                         self.scnView = view
-                        print("🖼️ DEBUG: SceneKit view creata con dimensioni \(view.bounds.width) x \(view.bounds.height)")
                     }
                 )
                 .onAppear {
-                    print("🚀 DEBUG: Model3DView è apparsa")
                     setupScene()
                     updateModel()
                 }
@@ -140,11 +136,13 @@ struct Model3DView: View {
         }
     }
     
-    // MARK: - Metodi esistenti
+    // MARK: - Metodi
+    
+    /// Configura la scena 3D e l'illuminazione
     private func setupScene() {
-        // Codice esistente per la configurazione della scena
         scene.background.contents = NSColor.darkGray
         
+        // Configurazione camera
         let camera = SCNCamera()
         camera.zNear = 1
         camera.zFar = 1000
@@ -154,7 +152,8 @@ struct Model3DView: View {
         cameraNode.eulerAngles = initialCameraEulerAngles
         scene.rootNode.addChildNode(cameraNode)
         
-        // Illuminazione
+        // Sistema di illuminazione a 4 punti
+        // 1. Luce ambientale
         let ambientLight = SCNNode()
         ambientLight.light = SCNLight()
         ambientLight.light?.type = .ambient
@@ -162,6 +161,7 @@ struct Model3DView: View {
         ambientLight.light?.color = NSColor(calibratedRed: 0.9, green: 0.9, blue: 1.0, alpha: 1.0)
         scene.rootNode.addChildNode(ambientLight)
         
+        // 2. Luce principale direzionale
         let mainLight = SCNNode()
         mainLight.light = SCNLight()
         mainLight.light?.type = .directional
@@ -174,6 +174,7 @@ struct Model3DView: View {
         mainLight.look(at: SCNVector3(0, 0, 0))
         scene.rootNode.addChildNode(mainLight)
         
+        // 3. Luce di riempimento
         let fillLight = SCNNode()
         fillLight.light = SCNLight()
         fillLight.light?.type = .directional
@@ -183,6 +184,7 @@ struct Model3DView: View {
         fillLight.look(at: SCNVector3(0, 0, 0))
         scene.rootNode.addChildNode(fillLight)
         
+        // 4. Luce per i contorni (rim light)
         let rimLight = SCNNode()
         rimLight.light = SCNLight()
         rimLight.light?.type = .directional
@@ -191,56 +193,38 @@ struct Model3DView: View {
         rimLight.position = SCNVector3(0, -100, -150)
         rimLight.look(at: SCNVector3(0, 0, 0))
         scene.rootNode.addChildNode(rimLight)
-        
-        print("✅ DEBUG: Illuminazione professionale a 4 punti configurata")
     }
     
+    /// Crea o aggiorna il modello 3D in base al valore di soglia
     private func updateModel() {
-        // Mantieni il codice esistente per l'aggiornamento del modello
-        print("🔄 DEBUG: Aggiornamento modello 3D con threshold \(thresholdValue)")
-        
-        // Rimuovi i nodi esistenti
-        let existingNodes = scene.rootNode.childNodes.filter { $0.name == "volumeMesh" || $0.name == "testBox" || $0.name == "wireframeMesh" }
-        if !existingNodes.isEmpty {
-            print("🗑️ DEBUG: Rimozione di \(existingNodes.count) nodi esistenti")
-            existingNodes.forEach { $0.removeFromParentNode() }
+        // Rimuovi i nodi esistenti prima di ricreare il modello
+        let existingNodes = scene.rootNode.childNodes.filter {
+            $0.name == "volumeMesh" || $0.name == "testBox" || $0.name == "wireframeMesh"
         }
         
+        existingNodes.forEach { $0.removeFromParentNode() }
+        
+        // Ottieni i dati DICOM correnti
         guard let series = dicomManager.currentSeries,
               let volume = dicomManager.createVolumeFromSeries(series) else {
-            print("⚠️ DEBUG: Nessun dato DICOM disponibile")
             return
         }
         
-        print("📋 DEBUG: Volume creato - dimensioni: \(volume.dimensions.x)x\(volume.dimensions.y)x\(volume.dimensions.z)")
-        
-        // Usa l'algoritmo Marching Cubes per generare la mesh
+        // Genera la mesh con Marching Cubes
         let marchingCubes = MarchingCubes()
-        print("⚙️ DEBUG: Inizio generazione mesh con isovalue \(thresholdValue)")
-        
         var mesh = marchingCubes.generateMesh(from: volume, isovalue: thresholdValue)
         
-        // Tentativo di riparare potenziali buchi
+        // Ottimizzazione della mesh
         closeHolesInMesh(&mesh)
-        
-        // Assicura il corretto orientamento delle normali
         fixMeshNormals(&mesh)
         
-        // Crea la geometria con impostazioni ottimizzate
+        // Crea il nodo del modello
         let geometry = SCNGeometry(mesh: mesh)
-        
-        // Crea il nodo per il modello
         let meshNode = SCNNode(geometry: geometry)
         meshNode.name = "volumeMesh"
-        
-        // Applica trasformazioni per migliorare la visualizzazione
-        meshNode.scale = SCNVector3(1.0, 1.0, 1.0)
-        
-        // Aggiungi il nodo alla scena
         scene.rootNode.addChildNode(meshNode)
-        print("✅ DEBUG: Modello aggiunto alla scena")
         
-        // Aggiungi supporto debug visivo - una sfera al centro della scena come riferimento
+        // Aggiungi un punto di riferimento al centro
         let sphere = SCNSphere(radius: 5)
         let sphereMaterial = SCNMaterial()
         sphereMaterial.diffuse.contents = NSColor.red
@@ -251,15 +235,15 @@ struct Model3DView: View {
         sphereNode.name = "debugSphere"
         scene.rootNode.addChildNode(sphereNode)
         
-        // Aggiungi visualizzazione dei contorni (silhouette enhancement)
+        // Aggiungi miglioramento dei contorni
         addSilhouetteEnhancement(to: meshNode)
         
-        // Applica la modalità di rendering corrente
+        // Applica la modalità di rendering scelta
         updateRenderingMode()
     }
     
+    /// Aggiunge un effetto di contorno al modello
     private func addSilhouetteEnhancement(to node: SCNNode) {
-        // Mantieni il codice esistente
         guard let geometry = node.geometry else { return }
         
         let outlineGeometry = geometry.copy() as! SCNGeometry
@@ -277,29 +261,23 @@ struct Model3DView: View {
         outlineNode.name = "outlineNode"
         
         node.addChildNode(outlineNode)
-        
-        print("✅ DEBUG: Miglioramento silhouette aggiunto")
     }
     
+    /// Aggiorna la modalità di visualizzazione del modello
     private func updateRenderingMode() {
-        // Mantieni il codice esistente
-        guard let meshNode = scene.rootNode.childNodes.first(where: { $0.name == "volumeMesh" }) else {
-            print("⚠️ DEBUG: Nessun nodo mesh trovato per applicare il rendering mode")
+        guard let meshNode = scene.rootNode.childNodes.first(where: { $0.name == "volumeMesh" }),
+              let geometry = meshNode.geometry else {
             return
         }
         
-        guard let geometry = meshNode.geometry else {
-            print("⚠️ DEBUG: Il nodo non ha geometria")
-            return
-        }
-        
-        print("🎨 DEBUG: Applicazione modalità rendering: \(renderingMode)")
-        
-        // Rimuovi eventuali nodi wireframe esistenti
+        // Rimuovi eventuali nodi wireframe esistenti se non necessari
         if renderingMode != .solidWithWireframe {
-            scene.rootNode.childNodes.filter { $0.name == "wireframeMesh" }.forEach { $0.removeFromParentNode() }
+            scene.rootNode.childNodes.filter { $0.name == "wireframeMesh" }.forEach {
+                $0.removeFromParentNode()
+            }
         }
         
+        // Applica il materiale in base alla modalità di rendering
         for i in 0..<geometry.materials.count {
             let material = geometry.materials[i]
             
@@ -329,6 +307,7 @@ struct Model3DView: View {
                 material.shininess = 0.3
                 material.lightingModel = .phong
                 
+                // Aggiungi un overlay wireframe se necessario
                 if !scene.rootNode.childNodes.contains(where: { $0.name == "wireframeMesh" }) {
                     let wireframeGeometry = geometry.copy() as! SCNGeometry
                     let wireMaterial = SCNMaterial()
@@ -347,18 +326,11 @@ struct Model3DView: View {
                 }
             }
         }
-        
-        print("✅ DEBUG: Modalità rendering applicata")
     }
     
+    /// Ripristina la posizione della camera alla vista iniziale
     private func resetCamera() {
-        // Mantieni il codice esistente
-        guard let scnView = self.scnView else {
-            print("⚠️ DEBUG: View SceneKit non disponibile per reset camera")
-            return
-        }
-        
-        print("🔄 DEBUG: Reset camera - posizione iniziale: \(initialCameraPosition)")
+        guard let scnView = self.scnView else { return }
         
         SCNTransaction.begin()
         SCNTransaction.animationDuration = 0.5
@@ -367,15 +339,11 @@ struct Model3DView: View {
         scnView.pointOfView?.orientation = SCNQuaternion(0, 0, 0, 1)
         
         SCNTransaction.commit()
-        
-        print("✅ DEBUG: Telecamera resettata alla posizione iniziale")
     }
     
+    /// Corregge l'orientamento delle normali nella mesh
     func fixMeshNormals(_ mesh: inout Mesh) {
-        print("DEBUG: Correzione orientamento normali")
-        
-        // Controllo se le normali sono già orientate correttamente
-        // Questo è un euristico semplificato per determinare se dobbiamo invertire le normali
+        // Verifica se le normali sono orientate correttamente
         let sampleSize = min(100, mesh.vertices.count)
         var sumDotProducts: Float = 0
         
@@ -386,24 +354,21 @@ struct Model3DView: View {
                 mesh.vertices[i].position.z / 100
             )
             
-            // Il prodotto scalare tra la posizione e la normale dovrebbe essere positivo
-            // se la normale punta verso l'esterno per una forma convessa
+            // Il prodotto scalare positivo indica normali verso l'esterno
             let dotProduct = dot(normalizedPosition, mesh.vertices[i].normal)
             sumDotProducts += dotProduct
         }
         
+        // Inverti le normali se sembrano puntare verso l'interno
         let shouldInvertNormals = sumDotProducts < 0
         
         if shouldInvertNormals {
-            print("DEBUG: Le normali sembrano puntare verso l'interno - inversione")
             for i in 0..<mesh.vertices.count {
                 mesh.vertices[i].normal = -mesh.vertices[i].normal
             }
-        } else {
-            print("DEBUG: Le normali sembrano già orientate correttamente")
         }
         
-        // Assicuriamoci che tutte le normali siano normalizzate
+        // Normalizza tutte le normali
         for i in 0..<mesh.vertices.count {
             let normal = mesh.vertices[i].normal
             let length = sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z)
@@ -416,20 +381,13 @@ struct Model3DView: View {
         }
     }
     
+    /// Tenta di riparare buchi nella mesh (semplificato)
     func closeHolesInMesh(_ mesh: inout Mesh) {
-        // Questa è una implementazione semplificata che potrebbe necessitare di adattamenti
-        // per il tuo caso specifico
-        
-        // 1. Identifica i bordi (edges) della mesh - quelli che appartengono a un solo triangolo
-        print("DEBUG: Tentativo di chiusura buchi nella mesh")
-        
-        // Struttura per tenere traccia delle occorrenze dei bordi
         struct Edge: Hashable {
             let v1: Int
             let v2: Int
             
             init(_ a: Int, _ b: Int) {
-                // Ordiniamo per garantire che (a,b) e (b,a) siano considerati lo stesso edge
                 if a < b {
                     v1 = a
                     v2 = b
@@ -440,7 +398,7 @@ struct Model3DView: View {
             }
         }
         
-        // Contiamo le occorrenze di ogni edge
+        // Identifica i bordi della mesh
         var edgeCounts: [Edge: Int] = [:]
         
         for triangle in mesh.triangles {
@@ -461,25 +419,18 @@ struct Model3DView: View {
         
         // Gli edge che appaiono una sola volta sono bordi
         let boundaryEdges = edgeCounts.filter { $0.value == 1 }.map { $0.key }
-        print("DEBUG: Trovati \(boundaryEdges.count) bordi di confine (potrebbero formare buchi)")
         
         // Se ci sono troppi bordi, potrebbe non essere pratico chiuderli tutti
         if boundaryEdges.count > 1000 {
-            print("DEBUG: Troppi bordi da chiudere, l'operazione potrebbe essere costosa")
             return
         }
         
-        // Chiusura di buchi semplici - nota: questa è una semplificazione
-        // Un'implementazione completa richiederebbe algoritmi più sofisticati
-        
-        // Per semplicità, è meglio implementare questo in un progetto reale
-        // con una libreria di mesh processing come CGAL o MeshLab
-        print("DEBUG: Chiusura buchi omessa - richiede implementazione specifica")
+        // Nota: l'implementazione completa richiederebbe algoritmi più sofisticati
     }
     
-    // MARK: - Gestione delle linee di disegno
+    // MARK: - Gestione del Disegno 3D
     
-    // Cancella tutte le linee
+    /// Cancella tutte le linee disegnate
     private func clearAllDrawings() {
         // Rimuovi tutti i nodi di disegno dalla scena
         for line in drawingLines {
@@ -490,11 +441,9 @@ struct Model3DView: View {
         
         // Svuota l'array
         drawingLines.removeAll()
-        
-        print("🧹 DEBUG: Cancellati tutti i disegni")
     }
     
-    // Annulla l'ultima linea disegnata
+    /// Annulla l'ultima linea disegnata
     private func undoLastDrawing() {
         guard !drawingLines.isEmpty else { return }
         
@@ -505,13 +454,12 @@ struct Model3DView: View {
         for node in lastLine.nodes {
             node.removeFromParentNode()
         }
-        
-        print("↩️ DEBUG: Annullata ultima linea")
     }
 }
 
-// MARK: - View rappresentabile che gestisce SceneKit e i gesti di disegno
+// MARK: - View SceneKit con supporto al disegno
 struct SceneKitDrawingView: NSViewRepresentable {
+    // Proprietà
     let scene: SCNScene
     let allowsCameraControl: Bool
     let autoenablesDefaultLighting: Bool
@@ -521,27 +469,32 @@ struct SceneKitDrawingView: NSViewRepresentable {
     @Binding var drawingLines: [DrawingLine]
     let onSceneViewCreated: (SCNView) -> Void
     
-    // Crea la view NSView (SCNView)
+    // Crea la view SCNView
     func makeNSView(context: Context) -> SCNView {
         let view = SCNView()
         view.scene = scene
-        view.allowsCameraControl = allowsCameraControl
+        view.allowsCameraControl = allowsCameraControl  // Assicuriamo che questa proprietà sia impostata
         view.autoenablesDefaultLighting = autoenablesDefaultLighting
         view.backgroundColor = NSColor.darkGray
-        view.showsStatistics = true
         
-        // Impostazioni avanzate per migliorare il rendering
+        // Impostazioni di rendering avanzate
         view.antialiasingMode = .multisampling4X
         view.preferredFramesPerSecond = 60
         view.isJitteringEnabled = true
         view.isPlaying = true
+        view.showsStatistics = false  // Disattiva le statistiche di performance
         
-        // Associa il delegate al context coordinator
+        // Associa il coordinatore per gestire gli eventi
         context.coordinator.scnView = view
         
-        // Configura i gesture recognizer
+        // Configura il gesture recognizer per il disegno
         let panGesture = NSPanGestureRecognizer(target: context.coordinator, action: #selector(DrawingCoordinator.handlePanGesture(_:)))
         panGesture.buttonMask = 0x1 // Clic sinistro
+        
+        // Importante: il gesture recognizer NON deve interferire con il controllo della camera
+        // quando siamo in modalità View
+        panGesture.delegate = context.coordinator
+        
         view.addGestureRecognizer(panGesture)
         
         // Callback alla view principale
@@ -550,7 +503,7 @@ struct SceneKitDrawingView: NSViewRepresentable {
         return view
     }
     
-    // Aggiorna la view NSView quando cambiano i dati
+    // Aggiorna la view quando cambiano i parametri
     func updateNSView(_ nsView: SCNView, context: Context) {
         // Aggiorna la scena
         nsView.scene = scene
@@ -559,19 +512,28 @@ struct SceneKitDrawingView: NSViewRepresentable {
         context.coordinator.drawingMode = drawingMode
         context.coordinator.currentDrawingColor = currentDrawingColor
         context.coordinator.lineThickness = lineThickness
+        
+        // Quando cambia la modalità, assicuriamoci che il controllo della camera funzioni correttamente
+        if drawingMode == .none {
+            // In modalità View, deve essere possibile ruotare il modello
+            nsView.allowsCameraControl = true
+        } else {
+            // In modalità Draw/Erase, disattiviamo il controllo della camera per evitare conflitti
+            nsView.allowsCameraControl = false
+        }
     }
     
-    // Crea il coordinatore che gestirà interazioni e disegno
+    // Crea il coordinatore per gestire gli eventi
     func makeCoordinator() -> DrawingCoordinator {
         DrawingCoordinator(self)
     }
     
     // MARK: - Coordinatore per la gestione dei gesti
-    class DrawingCoordinator: NSObject {
+    class DrawingCoordinator: NSObject, NSGestureRecognizerDelegate {
         var parent: SceneKitDrawingView
         var scnView: SCNView?
         
-        // Stato di disegno
+        // Stato disegno
         var drawingMode: DrawingMode
         var currentDrawingColor: NSColor
         var lineThickness: Float
@@ -587,8 +549,24 @@ struct SceneKitDrawingView: NSViewRepresentable {
             super.init()
         }
         
-        // MARK: - Gestione gesture
+        // Implementa il metodo delegato per controllare se il gesture recognizer dovrebbe essere attivato
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: NSGestureRecognizer) -> Bool {
+            // Attiva il gesture recognizer solo se siamo in modalità Draw o Erase
+            return drawingMode != .none
+        }
+        
+        // Implementa questo metodo per assicurarsi che il gesture recognizer non interferisca con altri
+        func gestureRecognizer(_ gestureRecognizer: NSGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith otherGestureRecognizer: NSGestureRecognizer) -> Bool {
+            // Non permettere riconoscimenti simultanei quando siamo in modalità di disegno
+            return drawingMode == .none
+        }
+        
+        // MARK: - Gestione eventi touch
+        
+        /// Gestisce gli eventi di trascinamento per disegnare sul modello
         @objc func handlePanGesture(_ gestureRecognizer: NSPanGestureRecognizer) {
+            // Aggiunta di un controllo extra per assicurarci di non interferire con la modalità View
             guard let scnView = self.scnView, drawingMode != .none else { return }
             
             let location = gestureRecognizer.location(in: scnView)
@@ -596,13 +574,13 @@ struct SceneKitDrawingView: NSViewRepresentable {
             // Hit test per trovare dove l'utente sta puntando sul modello 3D
             let hitResults = scnView.hitTest(location, options: nil)
             
-            // Filtra i risultati per considerare solo la mesh principale del volume
+            // Filtra i risultati per considerare solo la mesh principale
             let volumeHits = hitResults.filter { result in
                 return result.node.name == "volumeMesh" || (result.node.parent?.name == "volumeMesh")
             }
             
             guard let hit = volumeHits.first else {
-                // Se il gesto termina senza hit, salva la linea corrente se necessario
+                // Se il gesto termina senza hit, finalizza la linea
                 if gestureRecognizer.state == .ended || gestureRecognizer.state == .cancelled {
                     finalizeCurrentDrawing()
                 }
@@ -614,7 +592,7 @@ struct SceneKitDrawingView: NSViewRepresentable {
             
             switch gestureRecognizer.state {
             case .began:
-                // Inizia una nuova linea
+                // Inizia una nuova linea o cancella
                 if drawingMode == .draw {
                     beginDrawing(at: hitPosition)
                 } else if drawingMode == .erase {
@@ -622,7 +600,7 @@ struct SceneKitDrawingView: NSViewRepresentable {
                 }
                 
             case .changed:
-                // Continua la linea esistente o continua a cancellare
+                // Continua a disegnare o cancellare
                 if drawingMode == .draw && isDrawing {
                     continueDrawing(to: hitPosition)
                 } else if drawingMode == .erase {
@@ -640,12 +618,12 @@ struct SceneKitDrawingView: NSViewRepresentable {
             }
         }
         
-        // MARK: - Metodi per il disegno
+        // MARK: - Metodi di disegno
         
+        /// Inizia a disegnare una nuova linea
         private func beginDrawing(at position: SCNVector3) {
             guard let scene = scnView?.scene else { return }
             
-            print("🖌️ DEBUG: Inizio disegno in posizione \(position)")
             isDrawing = true
             lastHitPosition = position
             currentLineNodes = []
@@ -661,6 +639,7 @@ struct SceneKitDrawingView: NSViewRepresentable {
             currentLineNodes.append(lineContainerNode)
         }
         
+        /// Continua a disegnare la linea corrente fino al nuovo punto
         private func continueDrawing(to newPosition: SCNVector3) {
             guard isDrawing, let lastPosition = lastHitPosition, let lineContainer = currentLineNodes.first else { return }
             
@@ -691,10 +670,9 @@ struct SceneKitDrawingView: NSViewRepresentable {
             }
         }
         
+        /// Finalizza e salva la linea di disegno corrente
         private func finalizeCurrentDrawing() {
             guard isDrawing, !currentLineNodes.isEmpty else { return }
-            
-            print("✅ DEBUG: Disegno completato")
             
             // Salva la linea completata nell'array
             let newLine = DrawingLine(
@@ -714,6 +692,7 @@ struct SceneKitDrawingView: NSViewRepresentable {
             currentLineNodes = []
         }
         
+        /// Cancella le linee alla posizione specificata
         private func eraseAtPosition(_ position: SCNVector3) {
             guard let scene = scnView?.scene else { return }
             
@@ -723,7 +702,7 @@ struct SceneKitDrawingView: NSViewRepresentable {
             // Memorizziamo gli ID delle linee da rimuovere
             var linesToRemove = Set<UUID>()
             
-            // Crea una copia locale dell'array di drawing lines per evitare problemi di thread
+            // Crea una copia locale dell'array di drawing lines
             var localDrawingLines = parent.drawingLines
             
             // Verifica ogni linea disegnata
@@ -753,7 +732,6 @@ struct SceneKitDrawingView: NSViewRepresentable {
                     
                     // Rimuovi la linea dall'array
                     localDrawingLines.remove(at: index)
-                    print("🗑️ DEBUG: Linea cancellata")
                 }
             }
             
@@ -767,6 +745,7 @@ struct SceneKitDrawingView: NSViewRepresentable {
         
         // MARK: - Metodi di supporto
         
+        /// Crea un nodo sfera per i punti della linea
         private func createSphereNode(at position: SCNVector3, color: NSColor, radius: CGFloat) -> SCNNode {
             let sphere = SCNSphere(radius: radius)
             
@@ -782,6 +761,7 @@ struct SceneKitDrawingView: NSViewRepresentable {
             return node
         }
         
+        /// Crea un cilindro tra due punti per un segmento di linea
         private func createCylinderLine(from startPoint: SCNVector3, to endPoint: SCNVector3,
                                       color: NSColor, thickness: Float) -> SCNNode {
             // Calcola la lunghezza del cilindro
@@ -805,25 +785,26 @@ struct SceneKitDrawingView: NSViewRepresentable {
             return node
         }
         
-        // Metodo statico per calcolare la distanza
+        /// Calcola la distanza tra due punti 3D
         static func distance(from point1: SCNVector3, to point2: SCNVector3) -> Float {
             let dx = point1.x - point2.x
             let dy = point1.y - point2.y
             let dz = point1.z - point2.z
             
-            // Suddividi il calcolo in passaggi intermedi
+            // Suddividi il calcolo in passaggi intermedi per aiutare il compilatore
             let dxSquared = dx * dx
             let dySquared = dy * dy
             let dzSquared = dz * dz
             
             let sumOfSquares = dxSquared + dySquared + dzSquared
             
-            // Usa sqrt() specificando esplicitamente che vogliamo la versione per Float
+            // Usa esplicitamente Float per evitare errori di conversione
             let result = Float(sqrt(Double(sumOfSquares)))
             
             return result
         }
         
+        /// Orienta un cilindro tra due punti nello spazio 3D
         private func positionCylinderBetweenPoints(cylinder: SCNNode, from: SCNVector3, to: SCNVector3) {
             // 1. Posiziona al punto medio
             let midX = (from.x + to.x) / 2
@@ -855,8 +836,7 @@ struct SceneKitDrawingView: NSViewRepresentable {
             let yAxisY: Float = 1
             let yAxisZ: Float = 0
             
-            // 6. Calcola il prodotto scalare
-            // Calcola il prodotto scalare in passaggi separati
+            // 6. Calcola il prodotto scalare in passaggi separati
             let product1 = Float(yAxisX) * Float(normDirX)
             let product2 = Float(yAxisY) * Float(normDirY)
             let product3 = Float(yAxisZ) * Float(normDirZ)
@@ -879,7 +859,7 @@ struct SceneKitDrawingView: NSViewRepresentable {
             let normDirY_float: Float = Float(normDirY)
             let normDirZ_float: Float = Float(normDirZ)
 
-            // Calcola il prodotto vettoriale componente per componente con tipi espliciti
+            // Calcola il prodotto vettoriale in componenti
             let rotAxisX: Float = yAxisY * normDirZ_float - yAxisZ * normDirY_float
             let rotAxisY: Float = yAxisZ * normDirX_float - yAxisX * normDirZ_float
             let rotAxisZ: Float = yAxisX * normDirY_float - yAxisY * normDirX_float
@@ -905,39 +885,33 @@ struct SceneKitDrawingView: NSViewRepresentable {
     }
 }
 
-// MARK: - Estensioni supporto
+// MARK: - Estensioni
 
-// Estensione che aggiunge un metodo per creare una geometria SceneKit da una mesh Marching Cubes
+/// Estensione per creare geometria SceneKit da una mesh Marching Cubes
 extension SCNGeometry {
     convenience init(mesh: Mesh) {
-        // Array per memorizzare vertici e normali convertiti
+        // Prepara array per vertici e normali
         var vertices: [SCNVector3] = []
         var normals: [SCNVector3] = []
         
-        // Converte ogni vertice della mesh nel formato richiesto da SceneKit
+        // Converte ogni vertice della mesh nel formato SceneKit
         for vertex in mesh.vertices {
             vertices.append(SCNVector3(vertex.position.x, vertex.position.y, vertex.position.z))
             
-            // Utilizziamo normali calcolate in modo coerente
+            // Normalizza le normali
             let normal = vertex.normal
-            // Garantiamo che tutte le normali siano orientate correttamente e normalizzate
             let length = sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z)
             if length > 0 {
-                // Normalizza la normale e assicura che abbia la direzione corretta
                 normals.append(SCNVector3(normal.x / length, normal.y / length, normal.z / length))
             } else {
-                // Fallback: usa una normale predefinita se la normale è un vettore nullo
                 normals.append(SCNVector3(0, 1, 0))
             }
         }
         
-        // Indici dei triangoli - assicuriamoci che abbiano l'orientamento corretto
+        // Crea array di indici per i triangoli
         var indices: [Int32] = []
         
-        // IMPORTANTE: Potrebbe essere necessario cambiare l'ordine degli indici
-        // per invertire l'orientamento delle facce se necessario
         for triangle in mesh.triangles {
-            // Ordine normale - senso orario (clockwise)
             indices.append(Int32(triangle.indices.0))
             indices.append(Int32(triangle.indices.1))
             indices.append(Int32(triangle.indices.2))
@@ -947,7 +921,7 @@ extension SCNGeometry {
         let vertexSource = SCNGeometrySource(vertices: vertices)
         let normalSource = SCNGeometrySource(normals: normals)
         
-        // Crea l'elemento geometrico che definisce come i vertici formano triangoli
+        // Crea l'elemento geometrico triangolare
         let element = SCNGeometryElement(indices: indices, primitiveType: .triangles)
         
         // Inizializza la geometria
@@ -956,36 +930,26 @@ extension SCNGeometry {
         // Crea un materiale ottimizzato per la visualizzazione
         let material = SCNMaterial()
         
-        // Configurazioni di base per un materiale solido
+        // Impostazioni base
         material.diffuse.contents = NSColor(calibratedRed: 0.85, green: 0.85, blue: 0.85, alpha: 1.0)
         material.specular.contents = NSColor.white
         material.shininess = 0.3
-        
-        // Usa Blinn per una migliore resa delle superfici curve
         material.lightingModel = .blinn
         material.fillMode = .fill
-        
-        // Disattiva double-sided per migliorare le performance
         material.isDoubleSided = false
-        
-        // Esegue il culling dei poligoni con normali che puntano via dalla telecamera
         material.cullMode = .back
         
-        // Aggiunge riflettività per superfici più realistiche
+        // Effetti avanzati
         material.reflective.contents = NSColor(white: 0.15, alpha: 1.0)
-        
-        // Aggiunta di leggera ambient occlusion per migliorare la percezione di profondità
         material.ambient.contents = NSColor(white: 0.4, alpha: 1.0)
         
         self.materials = [material]
-        
-        print("DEBUG: SCNGeometry configurata con materiale solido ottimizzato")
     }
 }
 
-// Estensione per permettere il confronto tra serie DICOM
+/// Estensione per permettere il confronto tra serie DICOM
 extension DICOMSeries: Equatable {
     static func == (lhs: DICOMSeries, rhs: DICOMSeries) -> Bool {
-        return lhs.id == rhs.id  // Due serie sono uguali se hanno lo stesso ID
+        return lhs.id == rhs.id
     }
 }
