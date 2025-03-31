@@ -68,7 +68,7 @@ struct Model3DView: View {
                     Text("Solid+Wire").tag(RenderingMode.solidWithWireframe)
                 }
                 .pickerStyle(MenuPickerStyle())
-                .frame(width: 120)
+                .frame(width: 200)
                 .onChange(of: renderingMode) { _, _ in
                     updateRenderingMode()
                 }
