@@ -26,7 +26,7 @@ class MarchingCubes {
         
         // OTTIMIZZAZIONE 2: Limiti più severi per evitare sovraccarichi
         let maxTriangles = 20000000                     // Limite massimo di triangoli generabili
-        let maxProcessingTime: TimeInterval = 150.0     // Tempo massimo di elaborazione (in secondi)
+        let maxProcessingTime: TimeInterval = 300.0     // Tempo massimo di elaborazione (in secondi)
         let startTime = Date()                          // Memorizza l'orario di inizio per monitorare il tempo di esecuzione
         var processedCubes = 0                          // Contatore dei cubi elaborati
         var triangleCount = 0                           // Contatore dei triangoli creati
