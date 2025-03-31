@@ -627,6 +627,12 @@ struct SceneKitDrawingView: NSViewRepresentable {
             let lineContainerNode = SCNNode()
             lineContainerNode.name = "drawingLine"
             scene.rootNode.addChildNode(lineContainerNode)
+            
+            // Aggiungi una sfera al punto iniziale
+            let startPoint = createSphereNode(at: position, color: currentDrawingColor, radius: CGFloat(lineThickness / 2))
+            lineContainerNode.addChildNode(startPoint)
+            currentLineNodes.append(lineContainerNode)
+                    
         }
         
         /// Continua a disegnare la linea corrente fino al nuovo punto
@@ -650,6 +656,10 @@ struct SceneKitDrawingView: NSViewRepresentable {
                     thickness: lineThickness
                 )
                 lineContainer.addChildNode(lineSegment)
+                
+                // Crea una sfera al nuovo punto per connettere i segmenti senza lacune
+                let pointNode = createSphereNode(at: newPosition, color: currentDrawingColor, radius: CGFloat(lineThickness / 2))
+                lineContainer.addChildNode(pointNode)
 
                 // Aggiorna l'ultima posizione
                 lastHitPosition = newPosition
@@ -730,6 +740,22 @@ struct SceneKitDrawingView: NSViewRepresentable {
         }
         
         // MARK: - Metodi di supporto
+        
+        /// Crea un nodo sfera per i punti della linea
+         private func createSphereNode(at position: SCNVector3, color: NSColor, radius: CGFloat) -> SCNNode {
+             let sphere = SCNSphere(radius: radius)
+             
+             let material = SCNMaterial()
+             material.diffuse.contents = color
+             material.lightingModel = .blinn
+             sphere.materials = [material]
+             
+             let node = SCNNode(geometry: sphere)
+             node.position = position
+             node.name = "linePoint"
+             
+             return node
+         }
         
         /// Crea un cilindro tra due punti per un segmento di linea
         private func createCylinderLine(from startPoint: SCNVector3, to endPoint: SCNVector3,
