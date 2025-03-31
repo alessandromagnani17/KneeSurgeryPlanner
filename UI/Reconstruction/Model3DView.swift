@@ -47,6 +47,8 @@ struct Model3DView: View {
     @State private var lineThickness: Float = 1.0
     @State private var drawingLines: [DrawingLine] = []
     
+    @State private var isModelInitialized = false
+    
     // MARK: - UI
     var body: some View {
         VStack {
@@ -129,8 +131,12 @@ struct Model3DView: View {
                     }
                 )
                 .onAppear {
-                    setupScene()
-                    updateModel()
+                    if !isModelInitialized {
+                        setupScene()
+                        updateModel()
+                        // Imposta la flag a true dopo l'inizializzazione
+                        isModelInitialized = true
+                    }
                 }
             }
         }
@@ -425,7 +431,7 @@ struct Model3DView: View {
             return
         }
         
-        // Nota: l'implementazione completa richiederebbe algoritmi più sofisticati
+        // TODO: l'implementazione completa richiederebbe algoritmi più sofisticati
     }
     
     // MARK: - Gestione del Disegno 3D
