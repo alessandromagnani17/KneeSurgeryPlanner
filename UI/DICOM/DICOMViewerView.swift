@@ -45,7 +45,7 @@ struct DICOMViewerView: View {
                                 .frame(maxWidth: .infinity, alignment: .center) // Centra il testo orizzontalmente
                             
                             Slider(value: $windowCenter, in: -1000...2000)
-                                .frame(width: 150) // Imposta la larghezza dello slider
+                                .frame(width: 300) // Imposta la larghezza dello slider
                         }
 
                         // Controllo per la regolazione della larghezza del windowing
@@ -54,7 +54,7 @@ struct DICOMViewerView: View {
                                 .frame(maxWidth: .infinity, alignment: .center) // Centra il testo orizzontalmente
 
                             Slider(value: $windowWidth, in: 1...2000)
-                                .frame(width: 150) // Imposta la larghezza dello slider
+                                .frame(width: 300) // Imposta la larghezza dello slider
                         }
 
                         // Controllo per lo zoom dell'immagine
@@ -63,7 +63,7 @@ struct DICOMViewerView: View {
                                 .frame(maxWidth: .infinity, alignment: .center) // Centra il testo orizzontalmente
 
                             Slider(value: $zoom, in: 0.5...2.0)
-                                .frame(width: 100) // Imposta la larghezza dello slider
+                                .frame(width: 300) // Imposta la larghezza dello slider
                         }
 
                         Spacer()
