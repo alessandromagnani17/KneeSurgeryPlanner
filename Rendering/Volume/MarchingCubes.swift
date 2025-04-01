@@ -22,11 +22,11 @@ class MarchingCubes {
         //let maxEdgeLength: Float = 10.0 * volume.spacing.x
         
         // Aumenta la precisione per la fusione dei vertici (aiuta a creare una mesh più pulita)
-        let precision: Float = 50.0  // Aumentato da 10.0
+        let precision: Float = 100.0  // Aumentato da 10.0
         
         // OTTIMIZZAZIONE 2: Limiti più severi per evitare sovraccarichi
         let maxTriangles = 20000000                     // Limite massimo di triangoli generabili
-        let maxProcessingTime: TimeInterval = 300.0     // Tempo massimo di elaborazione (in secondi)
+        let maxProcessingTime: TimeInterval = 5000.0     // Tempo massimo di elaborazione (in secondi)
         let startTime = Date()                          // Memorizza l'orario di inizio per monitorare il tempo di esecuzione
         var processedCubes = 0                          // Contatore dei cubi elaborati
         var triangleCount = 0                           // Contatore dei triangoli creati
@@ -47,7 +47,7 @@ class MarchingCubes {
         
         // Filtro per i dati prima del Marching Cubes
         // Applica una soglia dura per eliminare il rumore a bassa densità
-        //let filteredVolume = volume.applyThresholdFilter(minValue: isovalue * 0.8)
+        //let filteredVolume = volume.applyThresholdFilter(minValue: isovalue * 0.05)
         let filteredVolume = volume
         
         // OTTIMIZZAZIONE 3: Analisi preliminare dei valori nel volume per determinare range
@@ -62,8 +62,8 @@ class MarchingCubes {
         
         // OTTIMIZZAZIONE 4: Riduzione dell'area di analisi
         // Possiamo scegliere di elaborare solo la parte centrale del volume per risparmiare tempo
-        let regionOfInterest = false                    // Se true, elabora solo la parte centrale
-        let padding = 5                                 // Margine da mantenere attorno alla regione di interesse
+        let regionOfInterest = true                    // Se true, elabora solo la parte centrale
+        let padding = 50                               // Margine da mantenere attorno alla regione di interesse
         
         // Calcolo dei limiti dell'area di interesse
         let startX: Int
@@ -194,8 +194,7 @@ class MarchingCubes {
                     var cubeIndex = 0
                     for i in 0..<8 {
                         // Usa una soglia con zona di sicurezza
-                        // Solo i valori chiaramente sotto la soglia vengono considerati "dentro"
-                        if cubeValues[i] < (isovalue - bufferValue) {
+                        if cubeValues[i] > (isovalue + bufferValue) && cubeValues[i] < 5000 {
                             cubeIndex |= (1 << i) // Imposta il bit i-esimo a 1
                         }
                     }
@@ -238,14 +237,6 @@ class MarchingCubes {
                             // Questo spigolo interseca l'isosuperficie
                             let v1 = edgeVerts[i].0 // Primo vertice dello spigolo
                             let v2 = edgeVerts[i].1 // Secondo vertice dello spigolo
-                            
-                            // Calcola la lunghezza dello spigolo
-                            let edgeLength = distance(cubePositions[v1], cubePositions[v2])
-                            
-                            // Salta gli spigoli anomalmente lunghi (questi creano le linee indesiderate)
-                            //if edgeLength > maxEdgeLength {
-                              //  continue
-                          //  }
                             
                             // Interpola per trovare il punto di intersezione lungo lo spigolo
                             // Prevenzione di divisione per zero
@@ -373,13 +364,6 @@ class MarchingCubes {
             }
         }
         
-        // Se non abbiamo generato triangoli, crea una sfera di default
-        // Questo garantisce che ci sia sempre qualcosa da visualizzare
-        if triangles.isEmpty {
-            print("⚠️ Nessun triangolo generato con isovalue \(isovalue), creazione sfera di default")
-            MeshUtility.createSphereMesh(radius: 50, segments: 12, vertices: &vertices, triangles: &triangles)
-        }
-        
         // Statistiche finali
         let endTime = Date()
         let elapsedTime = endTime.timeIntervalSince(startTime)
@@ -396,7 +380,7 @@ class MarchingCubes {
             mesh: Mesh(vertices: vertices, triangles: triangles),
             minComponentSize: 100
         )
-        let smoothedMesh = smoothMesh(cleanedMesh, iterations: 2, factor: 0.3)
+        let smoothedMesh = smoothMesh(cleanedMesh, iterations: 3, factor: 0.4)
         
         for i in 0..<vertices.count {
             // Se la normale è quasi zero, sostituiscila con una normale predefinita
