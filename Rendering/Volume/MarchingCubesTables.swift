@@ -1,11 +1,14 @@
 import Foundation
 
-/// Tabelle per l'algoritmo Marching Cubes.
-/// Contiene le lookup table necessarie per determinare come costruire i triangoli
-/// dalla configurazione dei vertici del cubo.
+/*
+ Tabelle per l'algoritmo Marching Cubes.
+ Contiene le lookup table necessarie per determinare come costruire i triangoli
+ dalla configurazione dei vertici del cubo.
+ */
 struct MarchingCubesTables {
-    /// Tabella degli spigoli per Marching Cubes.
-    /// Questa tabella indica quali spigoli del cubo sono attraversati dall'isosuperficie.
+    
+    // Tabella degli spigoli per Marching Cubes.
+    // Questa tabella indica quali spigoli del cubo sono attraversati dall'isosuperficie.
     static let edgeTable: [Int] = [
         0x0  , 0x109, 0x203, 0x30a, 0x406, 0x50f, 0x605, 0x70c,
         0x80c, 0x905, 0xa0f, 0xb06, 0xc0a, 0xd03, 0xe09, 0xf00,
@@ -41,8 +44,8 @@ struct MarchingCubesTables {
         0x70c, 0x605, 0x50f, 0x406, 0x30a, 0x203, 0x109, 0x0
     ]
     
-    /// Tabella dei triangoli per Marching Cubes.
-    /// Per ogni configurazione di vertici, questa tabella indica come costruire i triangoli.
+    // Tabella dei triangoli per Marching Cubes.
+    // Per ogni configurazione di vertici, questa tabella indica come costruire i triangoli.
     static let triTable: [[Int]] = [
         [],
         [0, 8, 3],
