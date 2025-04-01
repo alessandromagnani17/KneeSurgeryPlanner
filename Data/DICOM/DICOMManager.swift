@@ -54,7 +54,7 @@ class DICOMManager: ObservableObject {
             throw DICOMError.invalidData
         }
         
-        print("❤️❤️❤️❤️❤️ - ", metadata)
+        dicomService.printKeyMetadata(from: firstFile.path)
         
         // Estrai le informazioni di serie
         let seriesInstanceUID = metadata["SeriesInstanceUID"] as? String ?? UUID().uuidString
@@ -158,7 +158,7 @@ class DICOMManager: ObservableObject {
         }
         
         // Ordina le immagini in base alla posizione della slice
-        images.sort { $0.sliceLocation < $1.sliceLocation }
+        images.sort { $0.instanceNumber < $1.instanceNumber }
         
         // Assegna le immagini alla serie
         series.images = images
