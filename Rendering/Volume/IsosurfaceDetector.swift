@@ -172,8 +172,6 @@ class IsosurfaceDetector {
         // Per TC, usa valori Hounsfield calibrati basati sui metadati se disponibili
         if volume.type == .ct {
             // Ottiene il range di valori reali dal volume se è disponibile il windowing
-            var adjustedValues: [Float] = [400.0] // Default per osso
-            
             if let windowCenter = volume.windowCenter, let windowWidth = volume.windowWidth {
                 print("📊 Usando WindowCenter: \(windowCenter), WindowWidth: \(windowWidth) per calcolo isovalori")
                 
