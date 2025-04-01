@@ -47,7 +47,7 @@ struct ContentView: View {
             }
         }
         .navigationTitle("Knee Surgery Planner") // Titolo della finestra principale
-        .frame(minWidth: 1000, minHeight: 700) // Dimensioni minime della finestra
+        .frame(minWidth: 1500, minHeight: 700) // Dimensioni minime della finestra
         .onAppear {
             setupNotifications() // Configura le notifiche per l'importazione DICOM
         }
