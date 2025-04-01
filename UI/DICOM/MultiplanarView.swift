@@ -30,7 +30,7 @@ struct MultiplanarView: View {
                         Text("Window Center: \(Int(windowCenter))")
                             .frame(maxWidth: .infinity, alignment: .center) // Centra il testo orizzontalmente
                         Slider(value: $windowCenter, in: -1000...2000)
-                            .frame(width: 150) // Imposta la larghezza dello slider
+                            .frame(width: 300) // Imposta la larghezza dello slider
                     }
 
                     // Slider per regolare l'ampiezza della finestra di visualizzazione
@@ -38,7 +38,7 @@ struct MultiplanarView: View {
                         Text("Window Width: \(Int(windowWidth))")
                             .frame(maxWidth: .infinity, alignment: .center) // Centra il testo orizzontalmente
                         Slider(value: $windowWidth, in: 1...2000)
-                            .frame(width: 150) // Imposta la larghezza dello slider
+                            .frame(width: 300) // Imposta la larghezza dello slider
                     }
                     
                     Spacer()
@@ -179,7 +179,7 @@ struct MultiplanarView: View {
 
     // - Funzione di rendering
     func renderSlice(from volume: Volume, orientation: MPROrientation, sliceIndex: Int,
-                    windowCenter: Double, windowWidth: Double) -> CGImage? {
+                      windowCenter: Double, windowWidth: Double) -> CGImage? {
         // Calcola le dimensioni dell'output in base all'orientamento
         var width: Int = 0
         var height: Int = 0
@@ -238,9 +238,9 @@ struct MultiplanarView: View {
                     
                 case .coronal:
                     // Slice coronale: coordinata Y fissa
-                    for z in 0..<volume.dimensions.z {
-                        for x in 0..<volume.dimensions.x {
-                            // Formula per accedere al voxel nel volume
+                    for z in 0..<height {  // Usiamo height invece di volume.dimensions.z
+                        for x in 0..<width {  // Usiamo width invece di volume.dimensions.x
+                            // Formula corretta per accedere al voxel nel volume
                             let volumeIndex = z * (volume.dimensions.x * volume.dimensions.y) +
                             sliceIndex * volume.dimensions.x + x
                             
@@ -250,7 +250,7 @@ struct MultiplanarView: View {
                                 let windowedValue = max(0, min(255, 255 * (value - lowerBound) / windowWidth))
                                 
                                 // Invertiamo l'asse z per correggere l'orientamento verticale
-                                let outputIndex = (volume.dimensions.z - 1 - z) * width + x
+                                let outputIndex = (height - 1 - z) * width + x
                                 
                                 // Verifica che l'indice sia all'interno dei limiti dell'array
                                 if outputIndex >= 0 && outputIndex < adjustedData.count {
@@ -262,9 +262,9 @@ struct MultiplanarView: View {
                     
                 case .sagittal:
                     // Slice sagittale: coordinata X fissa
-                    for z in 0..<volume.dimensions.z {
-                        for y in 0..<volume.dimensions.y {
-                            // Formula per accedere al voxel nel volume
+                    for z in 0..<height {  // Usiamo height invece di volume.dimensions.z
+                        for y in 0..<width {  // Usiamo width invece di volume.dimensions.y
+                            // Formula corretta per accedere al voxel nel volume
                             let volumeIndex = z * (volume.dimensions.x * volume.dimensions.y) +
                             y * volume.dimensions.x + sliceIndex
                             
@@ -274,7 +274,7 @@ struct MultiplanarView: View {
                                 let windowedValue = max(0, min(255, 255 * (value - lowerBound) / windowWidth))
                                 
                                 // Invertiamo l'asse z per correggere l'orientamento verticale
-                                let outputIndex = (volume.dimensions.z - 1 - z) * volume.dimensions.y + y
+                                let outputIndex = (height - 1 - z) * width + y
                                 
                                 // Verifica che l'indice sia all'interno dei limiti dell'array
                                 if outputIndex >= 0 && outputIndex < adjustedData.count {
@@ -308,8 +308,8 @@ struct MultiplanarView: View {
                     }
 
                 case .coronal:
-                    for z in 0..<volume.dimensions.z {
-                        for x in 0..<volume.dimensions.x {
+                    for z in 0..<height {  // Usiamo height invece di volume.dimensions.z
+                        for x in 0..<width {  // Usiamo width invece di volume.dimensions.x
                             let volumeIndex = z * (volume.dimensions.x * volume.dimensions.y) +
                                             sliceIndex * volume.dimensions.x + x
 
@@ -319,7 +319,7 @@ struct MultiplanarView: View {
                                 let windowedValue = max(0, min(255, 255 * (value - lowerBound) / windowWidth))
                                 
                                 // Invertiamo l'asse z per correggere l'orientamento verticale
-                                let outputIndex = (volume.dimensions.z - 1 - z) * width + x
+                                let outputIndex = (height - 1 - z) * width + x
                                 
                                 if outputIndex >= 0 && outputIndex < adjustedData.count {
                                     adjustedData[outputIndex] = UInt8(windowedValue)
@@ -329,8 +329,8 @@ struct MultiplanarView: View {
                     }
 
                 case .sagittal:
-                    for z in 0..<volume.dimensions.z {
-                        for y in 0..<volume.dimensions.y {
+                    for z in 0..<height {  // Usiamo height invece di volume.dimensions.z
+                        for y in 0..<width {  // Usiamo width invece di volume.dimensions.y
                             let volumeIndex = z * (volume.dimensions.x * volume.dimensions.y) +
                                             y * volume.dimensions.x + sliceIndex
 
@@ -340,7 +340,7 @@ struct MultiplanarView: View {
                                 let windowedValue = max(0, min(255, 255 * (value - lowerBound) / windowWidth))
                                 
                                 // Invertiamo l'asse z per correggere l'orientamento verticale
-                                let outputIndex = (volume.dimensions.z - 1 - z) * volume.dimensions.y + y
+                                let outputIndex = (height - 1 - z) * width + y
                                 
                                 if outputIndex >= 0 && outputIndex < adjustedData.count {
                                     adjustedData[outputIndex] = UInt8(windowedValue)
