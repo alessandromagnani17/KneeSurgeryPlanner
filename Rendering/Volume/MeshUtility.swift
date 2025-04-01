@@ -4,6 +4,24 @@ import simd
 /// Classe di utilità per la manipolazione e creazione di mesh 3D.
 /// Contiene funzioni per il vertex management, smoothing e creazione di forme base.
 class MeshUtility {
+    
+    
+    private struct Edge: Hashable {
+        let v1: Int
+        let v2: Int
+        
+        init(_ a: Int, _ b: Int) {
+            // Ordina i vertici per garantire l'unicità dell'edge
+            if a < b {
+                v1 = a
+                v2 = b
+            } else {
+                v1 = b
+                v2 = a
+            }
+        }
+    }
+    
     /// Aggiunge un vertice alla mesh, evitando duplicati attraverso una mappa di vertici
     static func addVertex(_ position: SIMD3<Float>, _ normal: SIMD3<Float>,
                           _ vertices: inout [Vertex], _ vertexMap: inout [String: UInt32],
@@ -27,49 +45,6 @@ class MeshUtility {
     static func mix(_ a: SIMD3<Float>, _ b: SIMD3<Float>, t: Float) -> SIMD3<Float> {
         let clampedT = max(0.0, min(1.0, t))
         return a * (1 - clampedT) + b * clampedT
-    }
-    
-    /// Crea una mesh sferica semplificata (per fallback)
-    static func createSphereMesh(radius: Float, segments: Int, vertices: inout [Vertex], triangles: inout [Triangle]) {
-        print("🔵 Creazione sfera fallback con \(segments) segmenti")
-        let pi = Float.pi
-        
-        // Genera i vertici
-        for i in 0...segments {
-            let phi = pi * Float(i) / Float(segments)
-            let cosPhi = cos(phi)
-            let sinPhi = sin(phi)
-            
-            for j in 0...segments {
-                let theta = 2.0 * pi * Float(j) / Float(segments)
-                let cosTheta = cos(theta)
-                let sinTheta = sin(theta)
-                
-                let x = radius * sinPhi * cosTheta
-                let y = radius * sinPhi * sinTheta
-                let z = radius * cosPhi
-                
-                let position = SIMD3<Float>(x, y, z)
-                let normal = normalize(position)
-                
-                vertices.append(Vertex(position: position, normal: normal))
-            }
-        }
-        
-        // Genera i triangoli
-        for i in 0..<segments {
-            for j in 0..<segments {
-                let first = UInt32(i * (segments + 1) + j)
-                let second = first + 1
-                let third = first + UInt32(segments + 1)
-                let fourth = third + 1
-                
-                triangles.append(Triangle(indices: (first, second, third)))
-                triangles.append(Triangle(indices: (second, fourth, third)))
-            }
-        }
-        
-        print("🔵 Creata sfera con \(vertices.count) vertici e \(triangles.count) triangoli")
     }
     
     /// Applica smoothing (lisciatura) alla mesh utilizzando l'algoritmo Laplaciano
@@ -183,7 +158,7 @@ class MeshUtility {
         return Mesh(vertices: smoothedVertices, triangles: triangles)
     }
     
-    /// NUOVO METODO: Rimuove componenti isolati dalla mesh
+    /// Rimuove componenti isolati dalla mesh
     static func removeDisconnectedComponents(mesh: Mesh, minComponentSize: Int) -> Mesh {
         print("🧹 Rimozione componenti isolati con dimensione minima: \(minComponentSize)")
         
@@ -305,7 +280,7 @@ class MeshUtility {
         }
     }
     
-    /// NUOVO METODO: Ottimizza la mesh rimuovendo vertici non utilizzati
+    /// Ottimizza la mesh rimuovendo vertici non utilizzati
     static func optimizeMesh(_ mesh: Mesh) -> Mesh {
         print("🔄 Ottimizzazione mesh: \(mesh.vertices.count) vertici, \(mesh.triangles.count) triangoli")
         
@@ -343,7 +318,7 @@ class MeshUtility {
         return Mesh(vertices: newVertices, triangles: newTriangles)
     }
     
-    /// NUOVO METODO: Limita i vertici al bounding box specificato
+    /// Limita i vertici al bounding box specificato
     static func clampMeshToBounds(_ mesh: Mesh, minBounds: SIMD3<Float>, maxBounds: SIMD3<Float>) -> Mesh {
         print("📏 Limitazione mesh al bounding box: \(minBounds) - \(maxBounds)")
         
@@ -358,7 +333,7 @@ class MeshUtility {
         return Mesh(vertices: clampedVertices, triangles: mesh.triangles)
     }
     
-    /// NUOVO METODO: Calcola il bounding box di una mesh
+    /// Calcola il bounding box di una mesh
     static func calculateBoundingBox(_ mesh: Mesh) -> (min: SIMD3<Float>, max: SIMD3<Float>) {
         guard !mesh.vertices.isEmpty else {
             return (SIMD3<Float>(0, 0, 0), SIMD3<Float>(0, 0, 0))
@@ -378,5 +353,195 @@ class MeshUtility {
         }
         
         return (minBounds, maxBounds)
+    }
+    
+    /// Corregge l'orientamento delle normali nella mesh
+    static func fixMeshNormals(_ mesh: inout Mesh) {
+        print("🔄 Correzione normali della mesh...")
+        
+        // Verifica se le normali sono orientate correttamente
+        // Campionando un sottoinsieme di vertici
+        let sampleSize = min(100, mesh.vertices.count)
+        var sumDotProducts: Float = 0
+        
+        for i in 0..<sampleSize {
+            // Normalizza la posizione per ottenere una "direzione" dal centro
+            let normalizedPosition = SIMD3<Float>(
+                mesh.vertices[i].position.x / 100,
+                mesh.vertices[i].position.y / 100,
+                mesh.vertices[i].position.z / 100
+            )
+            
+            // Il prodotto scalare positivo indica normali verso l'esterno
+            let dotProduct = dot(normalizedPosition, mesh.vertices[i].normal)
+            sumDotProducts += dotProduct
+        }
+        
+        // Inverti le normali se sembrano puntare verso l'interno
+        let shouldInvertNormals = sumDotProducts < 0
+        
+        if shouldInvertNormals {
+            print("⚠️ Rilevato orientamento delle normali invertito, correzione in corso...")
+            // Inverte tutte le normali
+            for i in 0..<mesh.vertices.count {
+                mesh.vertices[i].normal = -mesh.vertices[i].normal
+            }
+        }
+        
+        // Normalizza tutte le normali
+        for i in 0..<mesh.vertices.count {
+            let normal = mesh.vertices[i].normal
+            let length = sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z)
+            
+            if length > 0 {
+                mesh.vertices[i].normal = normal / length
+            } else {
+                // Fallback per normali nulle
+                mesh.vertices[i].normal = SIMD3<Float>(0, 1, 0)
+            }
+        }
+        
+        print("✅ Correzione normali completata")
+    }
+    
+    /// Tenta di riparare buchi nella mesh identificando e collegando bordi aperti
+    static func closeHolesInMesh(_ mesh: inout Mesh) {
+        print("🔍 Analisi buchi nella mesh...")
+        
+        // Identifica i bordi della mesh
+        var edgeCounts: [Edge: Int] = [:]
+        
+        // Conta l'occorrenza di ogni edge nella mesh
+        for triangle in mesh.triangles {
+            let i0 = Int(triangle.indices.0)
+            let i1 = Int(triangle.indices.1)
+            let i2 = Int(triangle.indices.2)
+            
+            let edges = [
+                Edge(i0, i1),
+                Edge(i1, i2),
+                Edge(i2, i0)
+            ]
+            
+            for edge in edges {
+                edgeCounts[edge, default: 0] += 1
+            }
+        }
+        
+        // Gli edge che appaiono una sola volta sono bordi (non condivisi)
+        let boundaryEdges = edgeCounts.filter { $0.value == 1 }.map { $0.key }
+        
+        // Se ci sono troppi bordi, potrebbe non essere pratico chiuderli tutti
+        if boundaryEdges.count > 1000 {
+            print("⚠️ Troppi bordi aperti nella mesh (\(boundaryEdges.count)), l'algoritmo di chiusura viene saltato")
+            return
+        }
+        
+        if boundaryEdges.isEmpty {
+            print("✅ Nessun buco rilevato nella mesh")
+            return
+        }
+        
+        print("🛠 Tentativo di chiusura di \(boundaryEdges.count) bordi aperti nella mesh")
+        
+        // Organizza i bordi in cicli (loop)
+        var boundaryLoops = findBoundaryLoops(from: boundaryEdges)
+        
+        // Tenta di chiudere i cicli più piccoli
+        var newTriangles: [Triangle] = []
+        
+        for (index, loop) in boundaryLoops.enumerated() {
+            if loop.count < 20 {  // Chiudi solo cicli piccoli per evitare creazione di facce non planari
+                print("🔧 Chiusura ciclo \(index) con \(loop.count) vertici")
+                closeLoop(loop, mesh: &mesh, newTriangles: &newTriangles)
+            } else {
+                print("⚠️ Ciclo \(index) troppo grande (\(loop.count) vertici), saltato")
+            }
+        }
+        
+        // Aggiungi i nuovi triangoli alla mesh
+        if !newTriangles.isEmpty {
+            print("✅ Aggiunti \(newTriangles.count) triangoli per chiudere i buchi")
+            mesh.triangles.append(contentsOf: newTriangles)
+        } else {
+            print("ℹ️ Nessun triangolo aggiunto per la chiusura")
+        }
+    }
+    
+    /// Trova i cicli di bordi nella mesh
+    private static func findBoundaryLoops(from boundaryEdges: [Edge]) -> [[Int]] {
+        // Crea un dizionario che mappa ogni vertice con i suoi vertici adiacenti
+        var adjacencyList: [Int: [Int]] = [:]
+        
+        for edge in boundaryEdges {
+            adjacencyList[edge.v1, default: []].append(edge.v2)
+            adjacencyList[edge.v2, default: []].append(edge.v1)
+        }
+        
+        var loops: [[Int]] = []
+        var visitedVertices = Set<Int>()
+        
+        // Per ogni vertice non ancora visitato nei bordi
+        for edge in boundaryEdges {
+            let startVertex = edge.v1
+            
+            if !visitedVertices.contains(startVertex) {
+                var loop: [Int] = []
+                var currentVertex = startVertex
+                var previousVertex: Int? = nil
+                
+                // Segui il bordo fino a completare il ciclo
+                while true {
+                    loop.append(currentVertex)
+                    visitedVertices.insert(currentVertex)
+                    
+                    guard let neighbors = adjacencyList[currentVertex] else { break }
+                    
+                    // Trova il prossimo vertice che non è quello da cui siamo arrivati
+                    var nextVertex: Int? = nil
+                    for neighbor in neighbors {
+                        if neighbor != previousVertex {
+                            nextVertex = neighbor
+                            break
+                        }
+                    }
+                    
+                    if nextVertex == nil || nextVertex == startVertex {
+                        // Ciclo completato o impossibile proseguire
+                        break
+                    }
+                    
+                    previousVertex = currentVertex
+                    currentVertex = nextVertex!
+                }
+                
+                if !loop.isEmpty {
+                    loops.append(loop)
+                }
+            }
+        }
+        
+        return loops
+    }
+    
+    /// Chiude un ciclo creando triangoli che lo riempiono
+    private static func closeLoop(_ loop: [Int], mesh: inout Mesh, newTriangles: inout [Triangle]) {
+        guard loop.count >= 3 else { return }
+        
+        if loop.count == 3 {
+            // Caso semplice: il ciclo è già un triangolo
+            newTriangles.append(Triangle(indices: (UInt32(loop[0]), UInt32(loop[1]), UInt32(loop[2]))))
+            return
+        }
+        
+        // Per cicli più grandi, usiamo la triangolazione a ventaglio dal primo vertice
+        // Non è ottimale ma è semplice
+        let anchorVertex = loop[0]
+        
+        for i in 1..<(loop.count - 1) {
+            newTriangles.append(Triangle(
+                indices: (UInt32(anchorVertex), UInt32(loop[i]), UInt32(loop[i+1]))
+            ))
+        }
     }
 }
