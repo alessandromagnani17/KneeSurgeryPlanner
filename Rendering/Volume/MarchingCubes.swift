@@ -16,7 +16,7 @@ class MarchingCubes {
         
         // OTTIMIZZAZIONE 1: Riduzione drastica della risoluzione del modello
         // Un valore più alto significa meno dettagli ma elaborazione più veloce
-        let downsampleFactor = 1
+        let downsampleFactor = 3
         
         // Parametro di distanza massima per eliminare le linee che si proiettano
         //let maxEdgeLength: Float = 10.0 * volume.spacing.x
@@ -194,7 +194,7 @@ class MarchingCubes {
                     var cubeIndex = 0
                     for i in 0..<8 {
                         // Usa una soglia con zona di sicurezza
-                        if cubeValues[i] > (isovalue + bufferValue) && cubeValues[i] < 5000 {
+                        if cubeValues[i] > (isovalue + bufferValue) && cubeValues[i] < 3000 {
                             cubeIndex |= (1 << i) // Imposta il bit i-esimo a 1
                         }
                     }
@@ -344,7 +344,7 @@ class MarchingCubes {
                                 print("⚠️ Limite massimo di triangoli raggiunto (\(maxTriangles))")
                                 let cleanedMesh = MeshUtility.removeDisconnectedComponents(
                                     mesh: smoothMesh(Mesh(vertices: vertices, triangles: triangles), iterations: 2, factor: 0.3),
-                                    minComponentSize: 100
+                                    minComponentSize: 500
                                 )
                                 return cleanedMesh
                             }
@@ -380,7 +380,7 @@ class MarchingCubes {
             mesh: Mesh(vertices: vertices, triangles: triangles),
             minComponentSize: 100
         )
-        let smoothedMesh = smoothMesh(cleanedMesh, iterations: 3, factor: 0.4)
+        let smoothedMesh = smoothMesh(cleanedMesh, iterations: 3, factor: 0.5)
         
         for i in 0..<vertices.count {
             // Se la normale è quasi zero, sostituiscila con una normale predefinita
