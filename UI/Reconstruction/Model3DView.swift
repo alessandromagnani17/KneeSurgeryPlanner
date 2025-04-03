@@ -8,7 +8,7 @@ struct Model3DView: View {
     @ObservedObject var dicomManager: DICOMManager
         
     // Configurazione camera
-    private let initialCameraPosition = SCNVector3(0, 0, 200)
+    private let initialCameraPosition = SCNVector3(250, 250, 800)
     private let initialCameraEulerAngles = SCNVector3(0, 0, 0)
     
     // Stato della scena 3D
@@ -241,7 +241,7 @@ struct Model3DView: View {
     private func setupCamera() {
         let camera = SCNCamera()
         camera.zNear = 1
-        camera.zFar = 1000
+        camera.zFar = 3000
         camera.fieldOfView = 45
         cameraNode.camera = camera
         cameraNode.position = initialCameraPosition
