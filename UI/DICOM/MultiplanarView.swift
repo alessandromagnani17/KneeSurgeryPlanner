@@ -13,7 +13,7 @@ struct MultiplanarView: View {
     @State private var sagittalIndex: Int = 0   // Indice per la vista laterale
     
     // Parametri per il "windowing" (regolazione del contrasto)
-    @State private var windowCenter: Double = 40   // Centro della finestra (livello grigio medio)
+    @State private var windowCenter: Double = 1100   // Centro della finestra (livello grigio medio)
     @State private var windowWidth: Double = 400   // Ampiezza della finestra (definisce il contrasto)
     
     
