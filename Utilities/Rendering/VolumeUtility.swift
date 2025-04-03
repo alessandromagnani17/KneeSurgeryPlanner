@@ -457,39 +457,3 @@ extension Volume {
         return VolumeUtility.applyThresholdFilter(self, minValue: -10000)
     }
 }
-
-/// Factory per creare volumi con dati personalizzati
-class VolumeFactory {
-    /// Crea un nuovo volume con dati personalizzati
-    static func createVolume(
-        data: Data,
-        dimensions: SIMD3<Int>,
-        spacing: SIMD3<Float>,
-        bitsPerVoxel: Int,
-        type: Volume.VolumeType,
-        rescaleSlope: Double?,
-        rescaleIntercept: Double?
-    ) -> Volume? {
-        // Utilizza il costruttore esistente per creare un volume vuoto
-        guard let newVolume = Volume(
-            columns: dimensions.x,
-            rows: dimensions.y,
-            slices: dimensions.z,
-            bitsStored: bitsPerVoxel,
-            windowCenter: nil,
-            windowWidth: nil,
-            sliceLocation: 0.0,
-            modality: type == .ct ? "CT" : "MR",
-            spacing: spacing
-        ) else {
-            return nil
-        }
-        
-        // NOTA: Questo approccio non può modificare direttamente il campo "data"
-        // essendo una proprietà let. Tecnicamente, dovremmo implementare una versione
-        // di Volume che consenta di inizializzare con dati personalizzati.
-        
-        // Per ora, restituiamo semplicemente il volume originale
-        return newVolume
-    }
-}

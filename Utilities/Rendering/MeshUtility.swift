@@ -4,8 +4,6 @@ import simd
 /// Classe di utilità per la manipolazione e creazione di mesh 3D.
 /// Contiene funzioni per il vertex management, smoothing e creazione di forme base.
 class MeshUtility {
-    
-    
     private struct Edge: Hashable {
         let v1: Int
         let v2: Int
@@ -316,43 +314,6 @@ class MeshUtility {
         
         print("✅ Ottimizzazione completata: \(newVertices.count) vertici, \(newTriangles.count) triangoli")
         return Mesh(vertices: newVertices, triangles: newTriangles)
-    }
-    
-    /// Limita i vertici al bounding box specificato
-    static func clampMeshToBounds(_ mesh: Mesh, minBounds: SIMD3<Float>, maxBounds: SIMD3<Float>) -> Mesh {
-        print("📏 Limitazione mesh al bounding box: \(minBounds) - \(maxBounds)")
-        
-        var clampedVertices = mesh.vertices
-        
-        for i in 0..<clampedVertices.count {
-            clampedVertices[i].position.x = max(minBounds.x, min(maxBounds.x, clampedVertices[i].position.x))
-            clampedVertices[i].position.y = max(minBounds.y, min(maxBounds.y, clampedVertices[i].position.y))
-            clampedVertices[i].position.z = max(minBounds.z, min(maxBounds.z, clampedVertices[i].position.z))
-        }
-        
-        return Mesh(vertices: clampedVertices, triangles: mesh.triangles)
-    }
-    
-    /// Calcola il bounding box di una mesh
-    static func calculateBoundingBox(_ mesh: Mesh) -> (min: SIMD3<Float>, max: SIMD3<Float>) {
-        guard !mesh.vertices.isEmpty else {
-            return (SIMD3<Float>(0, 0, 0), SIMD3<Float>(0, 0, 0))
-        }
-        
-        var minBounds = SIMD3<Float>(Float.greatestFiniteMagnitude, Float.greatestFiniteMagnitude, Float.greatestFiniteMagnitude)
-        var maxBounds = SIMD3<Float>(-Float.greatestFiniteMagnitude, -Float.greatestFiniteMagnitude, -Float.greatestFiniteMagnitude)
-        
-        for vertex in mesh.vertices {
-            minBounds.x = min(minBounds.x, vertex.position.x)
-            minBounds.y = min(minBounds.y, vertex.position.y)
-            minBounds.z = min(minBounds.z, vertex.position.z)
-            
-            maxBounds.x = max(maxBounds.x, vertex.position.x)
-            maxBounds.y = max(maxBounds.y, vertex.position.y)
-            maxBounds.z = max(maxBounds.z, vertex.position.z)
-        }
-        
-        return (minBounds, maxBounds)
     }
     
     /// Corregge l'orientamento delle normali nella mesh
