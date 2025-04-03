@@ -67,14 +67,14 @@ struct Model3DView: View {
             
             // Pulsante di esportazione
             Button("Export to Desktop") {
-                exportModelWithSecurityAccess()
+                exportModel()
             }
         }
         .padding()
     }
     
     
-    private func exportModelWithSecurityAccess() {
+    private func exportModel() {
         // 1. Ottieni il nodo del modello
         guard let meshNode = scene.rootNode.childNode(withName: "volumeMesh", recursively: true),
               let _ = meshNode.geometry else {
@@ -356,61 +356,12 @@ struct Model3DView: View {
         let meshNode = SCNNode(geometry: geometry)
         meshNode.name = "volumeMesh"
         scene.rootNode.addChildNode(meshNode)
-        
-        printSimpleHistogram(volume: volume)
-        
+                
         // Aggiungi miglioramento dei contorni
         addSilhouetteEnhancement(to: meshNode)
         
         // Applica la modalità di rendering scelta
         updateRenderingMode()
-    }
-    
-    /// Crea un istogramma semplificato dei valori del volume
-    private func printSimpleHistogram(volume: Volume) {
-        var ranges: [String: Int] = [
-            "<= -1000": 0,       // Aria
-            "-999 - 0": 0,       // Grasso
-            "1 - 400": 0,        // Tessuti molli
-            "401 - 1000": 0,     // Osso trabecolare
-            "1001 - 2000": 0,    // Osso compatto
-            "> 2000": 0          // Metallo/artefatti
-        ]
-        
-        // Campiona 1 voxel ogni 100 per velocità
-        let sampleRate = 50
-        var sampledCount = 0
-        
-        for z in stride(from: 0, to: volume.dimensions.z, by: sampleRate) {
-            for y in stride(from: 0, to: volume.dimensions.y, by: sampleRate) {
-                for x in stride(from: 0, to: volume.dimensions.x, by: sampleRate) {
-                    let value = VolumeUtility.getVoxelValue(volume, x, y, z)
-                    sampledCount += 1
-                    
-                    if value <= -1000 {
-                        ranges["<= -1000"]! += 1
-                    } else if value <= 0 {
-                        ranges["-999 - 0"]! += 1
-                    } else if value <= 400 {
-                        ranges["1 - 400"]! += 1
-                    } else if value <= 1000 {
-                        ranges["401 - 1000"]! += 1
-                    } else if value <= 2000 {
-                        ranges["1001 - 2000"]! += 1
-                    } else {
-                        ranges["> 2000"]! += 1
-                    }
-                }
-            }
-        }
-        
-        print("\n=== DISTRIBUZIONE VALORI ===")
-        print("Campione di \(sampledCount) voxel su \(volume.dimensions.x * volume.dimensions.y * volume.dimensions.z)")
-        for (range, count) in ranges {
-            let percentage = Float(count) / Float(sampledCount) * 100
-            print("\(range): \(count) voxel (\(percentage.rounded())%)")
-        }
-        print("============================")
     }
     
     /// Aggiunge un effetto di contorno al modello
@@ -551,9 +502,3 @@ struct Model3DView: View {
     }
 }
 
-/// Estensione per permettere il confronto tra serie DICOM
-extension DICOMSeries: Equatable {
-    static func == (lhs: DICOMSeries, rhs: DICOMSeries) -> Bool {
-        return lhs.id == rhs.id
-    }
-}
