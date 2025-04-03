@@ -467,7 +467,7 @@ class DrawingCoordinator: NSObject, NSGestureRecognizerDelegate {
             normalizedRotAxis.x,
             normalizedRotAxis.y,
             normalizedRotAxis.z,
-            CGFloat(angle)  
+            CGFloat(angle)
         )
     }
 }
