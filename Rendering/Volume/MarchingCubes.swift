@@ -16,7 +16,7 @@ class MarchingCubes {
         
         // OTTIMIZZAZIONE 1: Riduzione drastica della risoluzione del modello
         // Un valore più alto significa meno dettagli ma elaborazione più veloce
-        let downsampleFactor = 3
+        let downsampleFactor = 5
         
         // Parametro di distanza massima per eliminare le linee che si proiettano
         //let maxEdgeLength: Float = 10.0 * volume.spacing.x
