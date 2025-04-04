@@ -6,6 +6,9 @@ import ModelIO
 struct Model3DView: View {
     // MARK: - Proprietà
     @ObservedObject var dicomManager: DICOMManager
+    
+    // Gestore per la pianificazione chirurgica
+    @ObservedObject var planningManager: SurgicalPlanningManager
         
     // Configurazione camera
     private let initialCameraPosition = SCNVector3(250, 250, 800)
@@ -28,11 +31,22 @@ struct Model3DView: View {
     @State private var isModelInitialized = false
     @State private var isExporting = false
     
+    // MARK: - Proprietà di pianificazione chirurgica
+    @State private var isPlanningModeActive = false
+    @State private var selectedPlaneType: SurgicalPlaneType = .distal
+    
     // MARK: - UI
     var body: some View {
         VStack {
             renderingControlsView
-            drawingControlsView
+            
+            // Barra di controllo per la pianificazione o disegno
+            if isPlanningModeActive {
+                planningControlsView
+            } else {
+                drawingControlsView
+            }
+            
             modelView
         }
     }
@@ -69,90 +83,40 @@ struct Model3DView: View {
             Button("Export to Desktop") {
                 exportModel()
             }
+            
+            // Pulsante per attivare/disattivare pianificazione
+            Button(action: togglePlanningMode) {
+                Text(isPlanningModeActive ? "Disegno" : "Pianificazione")
+            }
+            .buttonStyle(.bordered)
         }
         .padding()
     }
     
-    
-    private func exportModel() {
-        // 1. Ottieni il nodo del modello
-        guard let meshNode = scene.rootNode.childNode(withName: "volumeMesh", recursively: true),
-              let _ = meshNode.geometry else {
-            DispatchQueue.main.async {
-                let alert = NSAlert()
-                alert.messageText = "Errore"
-                alert.informativeText = "Nessun modello 3D da esportare"
-                alert.runModal()
+    private var planningControlsView: some View {
+        planningControlsUI(
+            isPlanningModeActive: isPlanningModeActive,
+            selectedPlaneType: selectedPlaneType,
+            onTogglePlanningMode: togglePlanningMode,
+            onSelectPlaneType: { self.selectedPlaneType = $0 },
+            onAddPlane: {
+                self.addNewPlane(from: self.scnView, type: self.selectedPlaneType, scene: self.scene, planningManager: self.planningManager)
+            },
+            onRemovePlane: {
+                if let selectedPlane = planningManager.selectedPlane {
+                    // Rimuovi il nodo dalla scena
+                    selectedPlane.sceneNode?.removeFromParentNode()
+                    // Rimuovi il piano dal manager
+                    planningManager.removePlane(id: selectedPlane.id)
+                }
+            },
+            onRotatePlaneX: {
+                self.rotatePlaneX(planningManager: self.planningManager)
+            },
+            onRotatePlaneY: {
+                self.rotatePlaneY(planningManager: self.planningManager)
             }
-            return
-        }
-        
-        DispatchQueue.main.async {
-            // 2. Mostra un pannello e ottieni l'autorizzazione dell'utente
-            let savePanel = NSSavePanel()
-            savePanel.title = "Esporta modello 3D"
-            savePanel.nameFieldStringValue = "brain_model.scn"
-            savePanel.allowedFileTypes = ["scn"]
-            savePanel.canCreateDirectories = true
-            
-            let response = savePanel.runModal()
-            
-            if response == .OK, let url = savePanel.url {
-                // 3. Richiedi accesso esplicito alla risorsa selezionata
-                let didStartAccessing = url.startAccessingSecurityScopedResource()
-                print("Accesso alla risorsa avviato: \(didStartAccessing)")
-                
-                defer {
-                    // Assicurati sempre di rilasciare l'accesso
-                    if didStartAccessing {
-                        url.stopAccessingSecurityScopedResource()
-                        print("Accesso alla risorsa terminato")
-                    }
-                }
-                
-                // 4. Crea una scena temporanea e clona il nodo
-                let exportScene = SCNScene()
-                let clonedNode = meshNode.clone()
-                
-                // 5. Ottimizza materiali per l'esportazione (opzionale)
-                if let geometry = clonedNode.geometry {
-                    for material in geometry.materials {
-                        // Imposta proprietà dei materiali compatibili con RealityKit
-                        material.lightingModel = .physicallyBased
-                        material.diffuse.contents = NSColor(calibratedRed: 0.9, green: 0.9, blue: 0.9, alpha: 1.0)
-                        material.roughness.contents = 0.7
-                        material.metalness.contents = 0.0
-                    }
-                }
-                
-                exportScene.rootNode.addChildNode(clonedNode)
-                
-                // 6. Aggiungi una luce per migliorare la visualizzazione
-                let lightNode = SCNNode()
-                lightNode.light = SCNLight()
-                lightNode.light?.type = .directional
-                lightNode.light?.intensity = 1000
-                lightNode.position = SCNVector3(100, 100, 100)
-                exportScene.rootNode.addChildNode(lightNode)
-                
-                // 7. Salva il modello
-                let success = exportScene.write(to: url, options: nil, delegate: nil, progressHandler: nil)
-                
-                if success {
-                    let alert = NSAlert()
-                    alert.messageText = "Esportazione completata"
-                    alert.informativeText = "Il modello è stato salvato in formato SCN. Usa Reality Converter per convertirlo in USDZ se necessario."
-                    alert.runModal()
-                    
-                    NSWorkspace.shared.selectFile(url.path, inFileViewerRootedAtPath: "")
-                } else {
-                    let alert = NSAlert()
-                    alert.messageText = "Errore"
-                    alert.informativeText = "Impossibile salvare il modello."
-                    alert.runModal()
-                }
-            }
-        }
+        )
     }
     
     /// Controlli per il disegno sul modello
@@ -207,7 +171,7 @@ struct Model3DView: View {
         GeometryReader { _ in
             SceneKitDrawingView(
                 scene: scene,
-                allowsCameraControl: true,
+                allowsCameraControl: isPlanningModeActive ? false : true,
                 autoenablesDefaultLighting: false,
                 drawingMode: drawingMode,
                 lineStyle: lineStyle,
@@ -362,6 +326,24 @@ struct Model3DView: View {
         
         // Applica la modalità di rendering scelta
         updateRenderingMode()
+        
+        // Ripristina i piani chirurgici se necessario
+        if isPlanningModeActive {
+            // Rimuovi i nodi vecchi
+            for plane in planningManager.planes {
+                plane.sceneNode?.removeFromParentNode()
+            }
+            
+            // Ricrea i nodi e aggiungili alla scena
+            for plane in planningManager.planes {
+                let planeNode = plane.createSceneNode()
+                scene.rootNode.addChildNode(planeNode)
+                
+                if let scnView = self.scnView {
+                    plane.enableDragInteraction(on: scnView, manager: planningManager)
+                }
+            }
+        }
     }
     
     /// Aggiunge un effetto di contorno al modello
@@ -473,6 +455,88 @@ struct Model3DView: View {
         SCNTransaction.commit()
     }
     
+    /// Esporta il modello 3D in formato SCN
+    private func exportModel() {
+        // 1. Ottieni il nodo del modello
+        guard let meshNode = scene.rootNode.childNode(withName: "volumeMesh", recursively: true),
+              let _ = meshNode.geometry else {
+            DispatchQueue.main.async {
+                let alert = NSAlert()
+                alert.messageText = "Errore"
+                alert.informativeText = "Nessun modello 3D da esportare"
+                alert.runModal()
+            }
+            return
+        }
+        
+        DispatchQueue.main.async {
+            // 2. Mostra un pannello e ottieni l'autorizzazione dell'utente
+            let savePanel = NSSavePanel()
+            savePanel.title = "Esporta modello 3D"
+            savePanel.nameFieldStringValue = "brain_model.scn"
+            savePanel.allowedFileTypes = ["scn"]
+            savePanel.canCreateDirectories = true
+            
+            let response = savePanel.runModal()
+            
+            if response == .OK, let url = savePanel.url {
+                // 3. Richiedi accesso esplicito alla risorsa selezionata
+                let didStartAccessing = url.startAccessingSecurityScopedResource()
+                print("Accesso alla risorsa avviato: \(didStartAccessing)")
+                
+                defer {
+                    // Assicurati sempre di rilasciare l'accesso
+                    if didStartAccessing {
+                        url.stopAccessingSecurityScopedResource()
+                        print("Accesso alla risorsa terminato")
+                    }
+                }
+                
+                // 4. Crea una scena temporanea e clona il nodo
+                let exportScene = SCNScene()
+                let clonedNode = meshNode.clone()
+                
+                // 5. Ottimizza materiali per l'esportazione (opzionale)
+                if let geometry = clonedNode.geometry {
+                    for material in geometry.materials {
+                        // Imposta proprietà dei materiali compatibili con RealityKit
+                        material.lightingModel = .physicallyBased
+                        material.diffuse.contents = NSColor(calibratedRed: 0.9, green: 0.9, blue: 0.9, alpha: 1.0)
+                        material.roughness.contents = 0.7
+                        material.metalness.contents = 0.0
+                    }
+                }
+                
+                exportScene.rootNode.addChildNode(clonedNode)
+                
+                // 6. Aggiungi una luce per migliorare la visualizzazione
+                let lightNode = SCNNode()
+                lightNode.light = SCNLight()
+                lightNode.light?.type = .directional
+                lightNode.light?.intensity = 1000
+                lightNode.position = SCNVector3(100, 100, 100)
+                exportScene.rootNode.addChildNode(lightNode)
+                
+                // 7. Salva il modello
+                let success = exportScene.write(to: url, options: nil, delegate: nil, progressHandler: nil)
+                
+                if success {
+                    let alert = NSAlert()
+                    alert.messageText = "Esportazione completata"
+                    alert.informativeText = "Il modello è stato salvato in formato SCN. Usa Reality Converter per convertirlo in USDZ se necessario."
+                    alert.runModal()
+                    
+                    NSWorkspace.shared.selectFile(url.path, inFileViewerRootedAtPath: "")
+                } else {
+                    let alert = NSAlert()
+                    alert.messageText = "Errore"
+                    alert.informativeText = "Impossibile salvare il modello."
+                    alert.runModal()
+                }
+            }
+        }
+    }
+    
     // MARK: - Gestione del Disegno 3D
     
     /// Cancella tutte le linee disegnate
@@ -500,5 +564,13 @@ struct Model3DView: View {
             node.removeFromParentNode()
         }
     }
+    
+    private func togglePlanningMode() {
+        isPlanningModeActive.toggle()
+        
+        // Se disattiviamo la pianificazione, torniamo alla modalità di visualizzazione
+        if !isPlanningModeActive {
+            drawingMode = .none
+        }
+    }
 }
-
