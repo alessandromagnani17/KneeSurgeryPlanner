@@ -2,10 +2,13 @@ import SwiftUI
 import AppKit
 import simd
 
-// Vista principale che mostra le tre proiezioni multiplanari di dati DICOM
+// View principale che mostra le tre proiezioni multiplanari di dati DICOM
 struct MultiplanarView: View {
     // Gestisce i dati DICOM caricati nell'applicazione
     @ObservedObject var dicomManager: DICOMManager
+    
+    // Gestore dei piani chirurgici (passato dalla vista principale)
+    @ObservedObject var planningManager: SurgicalPlanningManager
     
     // Indici delle slice visualizzate nelle diverse viste
     @State private var axialIndex: Int = 0      // Indice per la vista dall'alto verso il basso
@@ -16,6 +19,8 @@ struct MultiplanarView: View {
     @State private var windowCenter: Double = 1100   // Centro della finestra (livello grigio medio)
     @State private var windowWidth: Double = 400   // Ampiezza della finestra (definisce il contrasto)
     
+    // Controllo visualizzazione piani
+    @State private var showPlanes: Bool = true
     
     var body: some View {
         VStack {
@@ -40,6 +45,10 @@ struct MultiplanarView: View {
                         Slider(value: $windowWidth, in: 1...2000)
                             .frame(width: 300) // Imposta la larghezza dello slider
                     }
+                    
+                    // Toggle per mostrare/nascondere i piani chirurgici
+                    Toggle("Mostra Piani", isOn: $showPlanes)
+                        .frame(width: 150)
                     
                     Spacer()
                 }
@@ -70,6 +79,16 @@ struct MultiplanarView: View {
                                         Image(nsImage: NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height)))
                                             .resizable()
                                             .aspectRatio(contentMode: .fit)
+                                    }
+                                    
+                                    // Visualizza le intersezioni dei piani chirurgici se attivato
+                                    if showPlanes {
+                                        planeIntersectionsView(
+                                            orientation: .axial,
+                                            sliceIndex: axialIndex,
+                                            volume: volume,
+                                            planningManager: planningManager
+                                        )
                                     }
                                 }
                             }
@@ -110,6 +129,15 @@ struct MultiplanarView: View {
                                             .resizable()
                                             .aspectRatio(contentMode: .fit)
                                     }
+                                    // Visualizza le intersezioni dei piani chirurgici se attivato
+                                    if showPlanes {
+                                        planeIntersectionsView(
+                                            orientation: .coronal,
+                                            sliceIndex: coronalIndex,
+                                            volume: volume,
+                                            planningManager: planningManager
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -148,6 +176,15 @@ struct MultiplanarView: View {
                                         Image(nsImage: NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height)))
                                             .resizable()
                                             .aspectRatio(contentMode: .fit)
+                                    }
+                                    // Visualizza le intersezioni dei piani chirurgici se attivato
+                                    if showPlanes {
+                                        planeIntersectionsView(
+                                            orientation: .sagittal,
+                                            sliceIndex: sagittalIndex,
+                                            volume: volume,
+                                            planningManager: planningManager
+                                        )
                                     }
                                 }
                             }
