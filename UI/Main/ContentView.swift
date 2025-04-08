@@ -10,9 +10,6 @@ struct ContentView: View {
     
     // Tiene traccia della scheda selezionata
     @State private var selectedTabIndex = 0
-    
-    // Gestore per la pianificazione chirurgica - condiviso tra le viste
-    @StateObject private var planningManager = SurgicalPlanningManager()
 
     var body: some View {
         NavigationView {
@@ -29,12 +26,12 @@ struct ContentView: View {
                         .tag(0)
                     
                     // Vista multiplanare (MPR)
-                    MultiplanarView(dicomManager: dicomManager, planningManager: planningManager)
+                    MultiplanarView(dicomManager: dicomManager)
                         .tabItem { Label("MPR View", systemImage: "square.grid.3x3") }
                         .tag(1)
                     
                     // Visualizzazione 3D dei dati DICOM
-                    Model3DView(dicomManager: dicomManager, planningManager: planningManager)
+                    Model3DView(dicomManager: dicomManager)
                         .tabItem { Label("3D Model", systemImage: "cube") }
                         .tag(2)
                 }
