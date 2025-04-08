@@ -127,6 +127,15 @@ struct Model3DView: View {
 
              exportScene.rootNode.addChildNode(clonedNode)
 
+             // Esporta anche le linee disegnate
+             for drawingLine in drawingLines {
+                 // Clona ciascun nodo linea
+                 for lineNode in drawingLine.nodes {
+                     let clonedLineNode = lineNode.clone()
+                     exportScene.rootNode.addChildNode(clonedLineNode)
+                 }
+             }
+             
              // 6. Aggiungi una luce per migliorare la visualizzazione
              let lightNode = SCNNode()
              lightNode.light = SCNLight()
@@ -141,7 +150,7 @@ struct Model3DView: View {
              if success {
                  let alert = NSAlert()
                  alert.messageText = "Esportazione completata"
-                 alert.informativeText = "Il modello è stato salvato in formato SCN. Usa Reality Converter per convertirlo in USDZ se necessario."
+                 alert.informativeText = "Il modello 3D completo è stato salvato in formato SCN. Usa Reality Converter per convertirlo in USDZ se necessario."
                  alert.runModal()
 
                  NSWorkspace.shared.selectFile(url.path, inFileViewerRootedAtPath: "")
