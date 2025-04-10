@@ -54,6 +54,14 @@ class DICOMManager: ObservableObject {
             throw DICOMError.invalidData
         }
         
+        // Controlla prima se il tag è disponibile in questa forma
+        if let orientationArray = metadata["ImageOrientationPatient"] as? [Double] {
+            let imageOrientation = orientationArray
+        } else if let orientationString = metadata["ImageOrientationPatient"] as? String {
+            // Se è in formato stringa, convertilo in array
+            let imageOrientation = orientationString.components(separatedBy: "\\").compactMap { Double($0) }
+        }
+        
         dicomService.printKeyMetadata(from: firstFile.path)
         
         // Estrai le informazioni di serie
