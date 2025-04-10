@@ -14,8 +14,8 @@ struct MultiplanarView: View {
 
     // Parametri per il "windowing" (regolazione del contrasto)
     // Valori ottimizzati per MRI del ginocchio
-    @State private var windowCenter: Double = 600
-    @State private var windowWidth: Double = 1200
+    @State private var windowCenter: Double = 700
+    @State private var windowWidth: Double = 1500
     
     // Controllo per l'inversione dell'immagine
     @State private var invertImages: Bool = false
