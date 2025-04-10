@@ -14,7 +14,7 @@ struct KneeSurgeryPlannerApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .frame(minWidth: 1500, minHeight: 768)
+                .frame(minWidth: 1500, minHeight: 900)
                 .onAppear {
                     // Configurazione aggiuntiva all'avvio dell'app
                 }
