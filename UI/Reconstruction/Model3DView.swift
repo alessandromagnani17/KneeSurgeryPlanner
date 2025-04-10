@@ -34,13 +34,38 @@ struct Model3DView: View {
     
     // MARK: - UI
     var body: some View {
-        VStack {
-            renderingControlsView
-            drawingControlsView
-            if let markerManager = markerManager {
-                markerControlsView(manager: markerManager)
+        VStack(spacing: 12) {
+            // Main section title
+            Text("3D Model Visualization")
+                .font(.headline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
+                .foregroundColor(.primary)
+            
+            // Control panels with consistent styling
+            VStack(spacing: 8) {
+                renderingControlsView
+                Divider()
+                drawingControlsView
+                
+                if let markerManager = markerManager {
+                    Divider()
+                    markerControlsView(manager: markerManager)
+                }
             }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(.windowBackgroundColor).opacity(0.6))
+                    .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+            )
+            .padding(.horizontal)
+            
+            // 3D model view
             modelViewWithMarkers
+                .cornerRadius(8)
+                .shadow(color: .black.opacity(0.2), radius: 3, x: 0, y: 2)
+                .padding([.horizontal, .bottom])
         }
         .onAppear {
             if markerManager == nil && !scene.rootNode.childNodes.isEmpty {
@@ -49,142 +74,255 @@ struct Model3DView: View {
             }
         }
     }
-    
+
     // MARK: - Viste componenti
-    
+
     /// Controlli per il rendering del modello
     private var renderingControlsView: some View {
-        HStack {
-            Text("Threshold: \(Int(thresholdValue))")
-            Slider(value: $thresholdValue, in: 0...1000)
-                .onChange(of: thresholdValue) { _, _ in
-                    updateModel()
+        VStack(alignment: .leading, spacing: 8) {
+            // Section header
+            Text("Rendering Options")
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundColor(.secondary)
+            
+            HStack(spacing: 15) {
+                // Threshold control with label
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Threshold: \(Int(thresholdValue))")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    
+                    Slider(value: $thresholdValue, in: 0...1000)
+                        .frame(width: 200)
+                        .onChange(of: thresholdValue) { _, _ in
+                            updateModel()
+                        }
                 }
-            
-            Spacer()
-            
-            Picker("Rendering", selection: $renderingMode) {
-                Text("Solid").tag(RenderingMode.solid)
-                Text("Wireframe").tag(RenderingMode.wireframe)
-                Text("Solid+Wire").tag(RenderingMode.solidWithWireframe)
-            }
-            .pickerStyle(MenuPickerStyle())
-            .frame(width: 200)
-            .onChange(of: renderingMode) { _, _ in
-                updateRenderingMode()
-            }
-            
-            Button("Reset Camera") {
-                resetCamera()
-            }
-            
-            // Pulsante di esportazione con menu contestuale
-            Menu("Esporta") {
-                Button("Modello Base") {
-                    exportModel()
-                }
-                
-                Button("Con Marker Fiduciali") {
-                    if let markerManager = markerManager {
-                        exportModelWithMarkers(markerManager: markerManager)
-                    }
-                }
-            }
-        }
-        .padding()
-    }
-    
-    /// Controlli per il disegno sul modello
-    private var drawingControlsView: some View {
-        HStack {
-            // Selezione modalità disegno
-            Picker("Mode", selection: $drawingMode) {
-                Text("View").tag(DrawingMode.none)
-                Text("Draw").tag(DrawingMode.draw)
-                Text("Erase").tag(DrawingMode.erase)
-            }
-            .pickerStyle(SegmentedPickerStyle())
-            .frame(width: 200)
-            
-            Picker("Line Style", selection: $lineStyle) {
-                Text("Freehand").tag(LineStyle.freehand)
-                Text("Straight").tag(LineStyle.straight)
-            }
-            .pickerStyle(SegmentedPickerStyle())
-            .frame(width: 250)
-            .disabled(drawingMode != .draw)
-            
-            // Selezione colore
-            ColorPicker("Line Color", selection: Binding(
-                get: { Color(self.currentDrawingColor) },
-                set: { self.currentDrawingColor = NSColor($0) }
-            ))
-            .disabled(drawingMode != .draw)
-            
-            // Controllo spessore linea
-            Text("Thickness:")
-            Slider(value: $lineThickness, in: 0.5...10.0)
-                .frame(width: 120)
-                .disabled(drawingMode != .draw)
-            
-            // Pulsanti di controllo disegno
-            Button("Clear All") {
-                clearAllDrawings()
-            }
-            .disabled(drawingLines.isEmpty)
-            
-            Button("Undo") {
-                undoLastDrawing()
-            }
-            .disabled(drawingLines.isEmpty)
-        }
-        .padding(.horizontal)
-    }
-    
-    /// Controlli per i marker fiduciali
-    private func markerControlsView(manager: FiducialMarkerManager) -> some View {
-        VStack {
-            HStack {
-                Text("Marker Fiduciali:")
-                    .font(.headline)
-                
-                Picker("Modalità", selection: $markerMode) {
-                    Text("Visualizza").tag(MarkerMode.view)
-                    Text("Aggiungi").tag(MarkerMode.add)
-                    Text("Modifica").tag(MarkerMode.edit)
-                    Text("Elimina").tag(MarkerMode.delete)
-                }
-                .pickerStyle(SegmentedPickerStyle())
-                .frame(width: 300)
                 
                 Spacer()
                 
-                Button("Aggiorna Piano") {
-                    manager.updateCuttingPlane()
+                // Rendering mode picker
+                HStack {
+                    Text("Style:")
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
+                    
+                    Picker("", selection: $renderingMode) {
+                        Text("Solid").tag(RenderingMode.solid)
+                        Text("Wireframe").tag(RenderingMode.wireframe)
+                        Text("Solid+Wire").tag(RenderingMode.solidWithWireframe)
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .frame(width: 220)
+                    .onChange(of: renderingMode) { _, _ in
+                        updateRenderingMode()
+                    }
                 }
                 
-                Button("Cancella Tutto") {
-                    manager.removeAllMarkers()
-                }
-                .disabled(manager.markers.isEmpty)
-            }
-            .padding(.horizontal)
-            
-            // Lista dei marker definiti (opzionale)
-            if !manager.markers.isEmpty {
-                ScrollView(.horizontal) {
-                    HStack(spacing: 8) {
-                        ForEach(manager.markers) { marker in
-                            Text(marker.name)
-                                .padding(.vertical, 4)
-                                .padding(.horizontal, 8)
-                                .background(Color.blue.opacity(0.2))
-                                .cornerRadius(4)
+                // Action buttons
+                HStack(spacing: 10) {
+                    Button(action: resetCamera) {
+                        HStack {
+                            Image(systemName: "camera.viewfinder")
+                            Text("Reset View")
                         }
+                        .frame(minWidth: 100)
                     }
-                    .padding(.horizontal)
+                    .buttonStyle(.bordered)
+                    
+                    // Export menu
+                    Menu {
+                        Button("Base Model") {
+                            exportModel()
+                        }
+                        
+                        Button("Model with Markers") {
+                            if let markerManager = markerManager {
+                                exportModelWithMarkers(markerManager: markerManager)
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "square.and.arrow.up")
+                            Text("Export")
+                        }
+                        .frame(minWidth: 100)
+                    }
+                    .menuStyle(BorderlessButtonMenuStyle())
+                    .buttonStyle(.bordered)
                 }
-                .frame(height: 30)
+            }
+        }
+    }
+
+    /// Controlli per il disegno sul modello
+    private var drawingControlsView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Section header
+            Text("Drawing Tools")
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundColor(.secondary)
+            
+            HStack(spacing: 16) {
+                // Drawing mode selector
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Mode:")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    
+                    Picker("", selection: $drawingMode) {
+                        Label("View", systemImage: "eye").tag(DrawingMode.none)
+                        Label("Draw", systemImage: "pencil").tag(DrawingMode.draw)
+                        Label("Erase", systemImage: "eraser").tag(DrawingMode.erase)
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .frame(width: 220)
+                }
+                
+                // Line style selector
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Line Style:")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    
+                    Picker("", selection: $lineStyle) {
+                        Label("Freehand", systemImage: "scribble").tag(LineStyle.freehand)
+                        Label("Straight", systemImage: "line.diagonal").tag(LineStyle.straight)
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .frame(width: 220)
+                    .disabled(drawingMode != .draw)
+                    .opacity(drawingMode == .draw ? 1.0 : 0.6)
+                }
+                
+                Spacer()
+                
+                // Line appearance controls
+                HStack(spacing: 15) {
+                    // Color picker
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Color:")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                        
+                        ColorPicker("", selection: Binding(
+                            get: { Color(self.currentDrawingColor) },
+                            set: { self.currentDrawingColor = NSColor($0) }
+                        ))
+                        .labelsHidden()
+                        .disabled(drawingMode != .draw)
+                        .opacity(drawingMode == .draw ? 1.0 : 0.6)
+                    }
+                    
+                    // Thickness slider
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Thickness: \(String(format: "%.1f", lineThickness))")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                        
+                        Slider(value: $lineThickness, in: 0.5...10.0)
+                            .frame(width: 120)
+                            .disabled(drawingMode != .draw)
+                            .opacity(drawingMode == .draw ? 1.0 : 0.6)
+                    }
+                }
+                
+                // Drawing action buttons
+                HStack(spacing: 10) {
+                    Button(action: undoLastDrawing) {
+                        Label("Undo", systemImage: "arrow.uturn.backward")
+                            .frame(minWidth: 80)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(drawingLines.isEmpty)
+                    
+                    Button(action: clearAllDrawings) {
+                        Label("Clear All", systemImage: "trash")
+                            .frame(minWidth: 80)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(drawingLines.isEmpty)
+                }
+            }
+        }
+    }
+
+    /// Controlli per i marker fiduciali
+    private func markerControlsView(manager: FiducialMarkerManager) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Section header
+            Text("Fiducial Markers & Cutting Plane")
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundColor(.secondary)
+            
+            VStack(spacing: 8) {
+                HStack(spacing: 16) {
+                    // Marker mode selector
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Marker Mode:")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                        
+                        Picker("", selection: $markerMode) {
+                            Label("View", systemImage: "eye").tag(MarkerMode.view)
+                            Label("Add", systemImage: "plus.circle").tag(MarkerMode.add)
+                            Label("Edit", systemImage: "arrow.up.and.down.and.arrow.left.and.right").tag(MarkerMode.edit)
+                            Label("Delete", systemImage: "minus.circle").tag(MarkerMode.delete)
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
+                        .frame(width: 400)
+                    }
+                    
+                    Spacer()
+                    
+                    // Marker action buttons
+                    HStack(spacing: 10) {
+                        Button(action: { manager.updateCuttingPlane() }) {
+                            Label("Update Plane", systemImage: "square.3.stack.3d")
+                                .frame(minWidth: 120)
+                        }
+                        .buttonStyle(.bordered)
+                        
+                        Button(action: { manager.removeAllMarkers() }) {
+                            Label("Clear Markers", systemImage: "xmark.circle")
+                                .frame(minWidth: 120)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(manager.markers.isEmpty)
+                    }
+                }
+                
+                // Markers list
+                if !manager.markers.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Placed Markers:")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                        
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(manager.markers) { marker in
+                                    HStack(spacing: 4) {
+                                        Circle()
+                                            .fill(Color.red)
+                                            .frame(width: 8, height: 8)
+                                        Text(marker.name)
+                                            .font(.system(size: 12))
+                                    }
+                                    .padding(.vertical, 4)
+                                    .padding(.horizontal, 8)
+                                    .background(Color.blue.opacity(0.15))
+                                    .cornerRadius(16)
+                                }
+                            }
+                            .padding(.horizontal, 2)
+                        }
+                        .frame(height: 30)
+                    }
+                }
             }
         }
     }
