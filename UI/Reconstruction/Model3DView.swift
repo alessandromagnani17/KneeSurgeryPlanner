@@ -334,7 +334,7 @@ struct Model3DView: View {
     /// Vista del modello 3D originale (mantenuta per compatibilità)
     private var modelView: some View {
         GeometryReader { _ in
-            SceneKitDrawingView(
+            SceneKitView(
                 scene: scene,
                 allowsCameraControl: true,
                 autoenablesDefaultLighting: false,
