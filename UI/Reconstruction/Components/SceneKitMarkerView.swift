@@ -147,23 +147,26 @@ struct SceneKitMarkerView: NSViewRepresentable {
             
             guard let scnView = renderer as? SCNView else { return }
             
-            // Ottiene la posizione attuale del mouse
-            let mouseLocation = NSEvent.mouseLocation
-            let windowPoint = scnView.window?.convertFromScreen(NSRect(x: mouseLocation.x, y: mouseLocation.y, width: 1, height: 1)).origin ?? .zero
-            let viewPoint = scnView.convert(windowPoint, from: nil)
-            
-            // Esegue un hit test per trovare dove si trova il mouse nello spazio 3D
-            let hitResults = scnView.hitTest(viewPoint, options: parent.hitTestOptions)
-            
-            // Filtra risultati per escludere marker e piani
-            let results = hitResults.filter { result in
-                let name = result.node.name ?? ""
-                return !name.starts(with: "fiducialMarker_") && !name.starts(with: "cuttingPlane_")
-            }
-            
-            // Aggiorna la posizione del marker se c'è un punto valido
-            if let result = results.first {
-                parent.markerManager.updateMarker(id: markerID, position: result.worldCoordinates)
+            // Sposta l'elaborazione relativa all'UI sul main thread
+            DispatchQueue.main.async {
+                // Ottiene la posizione attuale del mouse
+                let mouseLocation = NSEvent.mouseLocation
+                let windowPoint = scnView.window?.convertFromScreen(NSRect(x: mouseLocation.x, y: mouseLocation.y, width: 1, height: 1)).origin ?? .zero
+                let viewPoint = scnView.convert(windowPoint, from: nil)
+                
+                // Esegue un hit test per trovare dove si trova il mouse nello spazio 3D
+                let hitResults = scnView.hitTest(viewPoint, options: self.parent.hitTestOptions)
+                
+                // Filtra risultati per escludere marker e piani
+                let results = hitResults.filter { result in
+                    let name = result.node.name ?? ""
+                    return !name.starts(with: "fiducialMarker_") && !name.starts(with: "cuttingPlane_")
+                }
+                
+                // Aggiorna la posizione del marker se c'è un punto valido
+                if let result = results.first {
+                    self.parent.markerManager.updateMarker(id: markerID, position: result.worldCoordinates)
+                }
             }
         }
     }
