@@ -315,6 +315,82 @@ class MarkerManager: ObservableObject {
         return nearestID
     }
     
+    /// Sposta la camera per inquadrare un marker specifico
+    /// - Parameters:
+    ///   - markerId: ID del marker da inquadrare
+    ///   - scnView: La vista SceneKit in cui si trova la scena
+    ///   - duration: Durata dell'animazione in secondi
+    func focusCameraOnMarker(markerId: UUID, scnView: SCNView?, duration: Double = 0.5) {
+        guard let scnView = scnView else { return }
+        
+        // Trova il marker specifico
+        guard let marker = markers.first(where: { $0.id == markerId }),
+              let node = markerNodes[markerId] else { return }
+        
+        // Seleziona il marker
+        selectMarker(id: markerId)
+        
+        // Ottieni la posizione attuale della camera
+        let currentPosition = scnView.pointOfView?.position ?? SCNVector3Zero
+        
+        // Calcola una posizione leggermente distante dal marker in direzione della camera attuale
+        // per inquadrarlo frontalmente
+        let offset: Float = 100.0 // Distanza di offset dal marker
+        
+        // Calcola il vettore normalizzato dalla camera attuale al marker
+        let dirToMarker = SCNVector3(
+            marker.position.x - currentPosition.x,
+            marker.position.y - currentPosition.y,
+            marker.position.z - currentPosition.z
+        )
+        
+        // Normalizza il vettore per ottenere la direzione
+        let length = sqrt(
+            Float(dirToMarker.x * dirToMarker.x) +
+            Float(dirToMarker.y * dirToMarker.y) +
+            Float(dirToMarker.z * dirToMarker.z)
+        )
+        
+        guard length > 0.001 else { return } // Evita divisione per zero
+        
+        let normalizedDir = SCNVector3(
+            dirToMarker.x / CGFloat(length),
+            dirToMarker.y / CGFloat(length),
+            dirToMarker.z / CGFloat(length)
+        )
+        
+        // Calcola la nuova posizione della camera (marker - direzione normalizzata * offset)
+        let newCameraPosition = SCNVector3(
+            marker.position.x - normalizedDir.x * CGFloat(offset),
+            marker.position.y - normalizedDir.y * CGFloat(offset),
+            marker.position.z - normalizedDir.z * CGFloat(offset)
+        )
+        
+        // Crea un'animazione per spostare la camera
+        SCNTransaction.begin()
+        SCNTransaction.animationDuration = duration
+        SCNTransaction.animationTimingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        
+        // Sposta la camera alla nuova posizione
+        scnView.pointOfView?.position = newCameraPosition
+        
+        // Orienta la camera verso il marker
+        let lookAtConstraint = SCNLookAtConstraint(target: node)
+        lookAtConstraint.isGimbalLockEnabled = true
+        scnView.pointOfView?.constraints = [lookAtConstraint]
+        
+        // Imposta il vincolo solo temporaneamente per l'animazione
+        SCNTransaction.completionBlock = {
+            // Rimuovi il vincolo dopo l'animazione per permettere di controllare la camera normalmente
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                scnView.pointOfView?.constraints = []
+            }
+        }
+        
+        SCNTransaction.commit()
+    }
+    
+    
     // MARK: - Private methods for managing SceneKit nodes
     
     /// Create a visual node for a marker
