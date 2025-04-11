@@ -9,6 +9,9 @@ struct ModelViewContainer: View {
     @Binding var markerMode: MarkerMode
     let markerManager: FiducialMarkerManager?
     
+    // Usiamo una variabile privata per tracciare quando la view è stata creata
+    @State private var hasSetupSceneView = false
+    
     // MARK: - UI
     var body: some View {
         GeometryReader { geometry in
@@ -16,22 +19,32 @@ struct ModelViewContainer: View {
                 if let manager = markerManager {
                     SceneKitMarkerView(
                         scene: scene,
-                        allowsCameraControl: markerMode != .edit, // Disabilita controllo camera durante l'editing
+                        allowsCameraControl: markerMode != .edit,
                         autoenablesDefaultLighting: true,
                         markerMode: markerMode,
                         markerManager: manager,
                         onSceneViewCreated: { view in
-                            self.scnView = view
+                            // Salviamo la view per usarla dopo
+                            DispatchQueue.main.async {
+                                if !hasSetupSceneView {
+                                    scnView = view
+                                    hasSetupSceneView = true
+                                }
+                            }
                         }
                     )
                 } else {
-                    // Fallback alla vista normale se il manager non è stato inizializzato
                     SceneKitView(
                         scene: scene,
                         allowsCameraControl: true,
                         autoenablesDefaultLighting: false,
                         onSceneViewCreated: { view in
-                            self.scnView = view
+                            DispatchQueue.main.async {
+                                if !hasSetupSceneView {
+                                    scnView = view
+                                    hasSetupSceneView = true
+                                }
+                            }
                         }
                     )
                 }
