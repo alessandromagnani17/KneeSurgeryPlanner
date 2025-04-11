@@ -3,7 +3,7 @@ import SwiftUI
 /// Vista per la visualizzazione della lista dei marker raggruppati per piano di taglio
 struct MarkerListView: View {
     // MARK: - Proprietà
-    let markerManager: FiducialMarkerManager
+    let markerManager: MarkerManager
     let activePlaneID: UUID?
     
     // MARK: - UI
