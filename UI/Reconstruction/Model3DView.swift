@@ -49,8 +49,6 @@ struct Model3DView: View {
             // Control panels with consistent styling
             VStack(spacing: 8) {
                 renderingControlsView
-                /*Divider()
-                drawingControlsView*/
                 
                 if let markerManager = markerManager {
                     Divider()
@@ -184,99 +182,7 @@ struct Model3DView: View {
         }
     }
 
-    /// Controlli per il disegno sul modello
-    /*private var drawingControlsView: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Section header
-            Text("Drawing Tools")
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .foregroundColor(.secondary)
-            
-            HStack(spacing: 16) {
-                // Drawing mode selector
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Mode:")
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary)
-                    
-                    Picker("", selection: $drawingMode) {
-                        Label("View", systemImage: "eye").tag(DrawingMode.none)
-                        Label("Draw", systemImage: "pencil").tag(DrawingMode.draw)
-                        Label("Erase", systemImage: "eraser").tag(DrawingMode.erase)
-                    }
-                    .pickerStyle(SegmentedPickerStyle())
-                    .frame(width: 220)
-                }
-                
-                // Line style selector
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Line Style:")
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary)
-                    
-                    Picker("", selection: $lineStyle) {
-                        Label("Freehand", systemImage: "scribble").tag(LineStyle.freehand)
-                        Label("Straight", systemImage: "line.diagonal").tag(LineStyle.straight)
-                    }
-                    .pickerStyle(SegmentedPickerStyle())
-                    .frame(width: 220)
-                    .disabled(drawingMode != .draw)
-                    .opacity(drawingMode == .draw ? 1.0 : 0.6)
-                }
-                
-                Spacer()
-                
-                // Line appearance controls
-                HStack(spacing: 15) {
-                    // Color picker
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Color:")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                        
-                        ColorPicker("", selection: Binding(
-                            get: { Color(self.currentDrawingColor) },
-                            set: { self.currentDrawingColor = NSColor($0) }
-                        ))
-                        .labelsHidden()
-                        .disabled(drawingMode != .draw)
-                        .opacity(drawingMode == .draw ? 1.0 : 0.6)
-                    }
-                    
-                    // Thickness slider
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Thickness: \(String(format: "%.1f", lineThickness))")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                        
-                        Slider(value: $lineThickness, in: 0.5...10.0)
-                            .frame(width: 120)
-                            .disabled(drawingMode != .draw)
-                            .opacity(drawingMode == .draw ? 1.0 : 0.6)
-                    }
-                }
-                
-                // Drawing action buttons
-                HStack(spacing: 10) {
-                    Button(action: undoLastDrawing) {
-                        Label("Undo", systemImage: "arrow.uturn.backward")
-                            .frame(minWidth: 80)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(drawingLines.isEmpty)
-                    
-                    Button(action: clearAllDrawings) {
-                        Label("Clear All", systemImage: "trash")
-                            .frame(minWidth: 80)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(drawingLines.isEmpty)
-                }
-            }
-        }
-    }*/
-
+   
     /// Controlli per i marker fiduciali
     private func markerControlsView(manager: FiducialMarkerManager) -> some View {
         VStack(alignment: .leading, spacing: 8) {
