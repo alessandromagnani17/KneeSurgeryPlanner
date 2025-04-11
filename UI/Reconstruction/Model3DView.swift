@@ -15,13 +15,6 @@ struct Model3DView: View {
     // MARK: - UI
     var body: some View {
         VStack(spacing: 12) {
-            // Main section title
-            Text("3D Model Visualization")
-                .font(.headline)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal)
-                .foregroundColor(.primary)
-            
             // Control panels with consistent styling
             VStack(spacing: 8) {
                 RenderingControlsView(
