@@ -274,15 +274,22 @@ class MarkerManager: ObservableObject {
     
     /// Select a marker
     func selectMarker(id: UUID?) {
-        // Deselect current marker
-        if let selectedID = selectedMarkerID, let node = markerNodes[selectedID] {
-            if let sphere = node.geometry as? SCNSphere {
-                let markerPlaneID = markers.first(where: { $0.id == selectedID })?.planeGroupID
-                let color = markerPlaneID.map { planeColor(id: $0) } ?? defaultMarkerColor
-                sphere.firstMaterial?.diffuse.contents = color.withAlphaComponent(1.0)  // Assicura alpha 1.0
+        // Se stiamo selezionando lo stesso marker già selezionato, non fare nulla
+        if selectedMarkerID == id {
+            return
+        }
+        
+        // Ripristina il colore originale di TUTTI i marker
+        for marker in markers {
+            if let node = markerNodes[marker.id], marker.id != id {
+                if let sphere = node.geometry as? SCNSphere {
+                    let color = planeColor(id: marker.planeGroupID)
+                    sphere.firstMaterial?.diffuse.contents = color.withAlphaComponent(1.0)
+                }
             }
         }
         
+        // Aggiorna lo stato di selezione
         selectedMarkerID = id
         
         // Select new marker
@@ -294,6 +301,13 @@ class MarkerManager: ObservableObject {
         
         // Forza un aggiornamento dell'interfaccia UI
         objectWillChange.send()
+        
+        // Notifica il cambio di selezione
+        NotificationCenter.default.post(
+            name: NSNotification.Name("MarkerSelectionChanged"),
+            object: self,
+            userInfo: ["selectedMarkerID": id as Any]
+        )
     }
     
     /// Find the nearest marker to a given position
@@ -330,49 +344,18 @@ class MarkerManager: ObservableObject {
         // Seleziona il marker
         selectMarker(id: markerId)
         
-        // Ottieni la posizione attuale della camera
-        let currentPosition = scnView.pointOfView?.position ?? SCNVector3Zero
+        // Posizione iniziale fissa della camera come richiesto
+        let initialCameraPosition = SCNVector3(250, 250, 800)
+        let initialCameraEulerAngles = SCNVector3(0, 0, 0)
         
-        // Calcola una posizione leggermente distante dal marker in direzione della camera attuale
-        // per inquadrarlo frontalmente
-        let offset: Float = 100.0 // Distanza di offset dal marker
-        
-        // Calcola il vettore normalizzato dalla camera attuale al marker
-        let dirToMarker = SCNVector3(
-            marker.position.x - currentPosition.x,
-            marker.position.y - currentPosition.y,
-            marker.position.z - currentPosition.z
-        )
-        
-        // Normalizza il vettore per ottenere la direzione
-        let length = sqrt(
-            Float(dirToMarker.x * dirToMarker.x) +
-            Float(dirToMarker.y * dirToMarker.y) +
-            Float(dirToMarker.z * dirToMarker.z)
-        )
-        
-        guard length > 0.001 else { return } // Evita divisione per zero
-        
-        let normalizedDir = SCNVector3(
-            dirToMarker.x / CGFloat(length),
-            dirToMarker.y / CGFloat(length),
-            dirToMarker.z / CGFloat(length)
-        )
-        
-        // Calcola la nuova posizione della camera (marker - direzione normalizzata * offset)
-        let newCameraPosition = SCNVector3(
-            marker.position.x - normalizedDir.x * CGFloat(offset),
-            marker.position.y - normalizedDir.y * CGFloat(offset),
-            marker.position.z - normalizedDir.z * CGFloat(offset)
-        )
-        
-        // Crea un'animazione per spostare la camera
+        // Imposta la posizione della camera alla posizione iniziale fissa
         SCNTransaction.begin()
         SCNTransaction.animationDuration = duration
         SCNTransaction.animationTimingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         
-        // Sposta la camera alla nuova posizione
-        scnView.pointOfView?.position = newCameraPosition
+        // Sposta la camera alla posizione fissa
+        scnView.pointOfView?.position = initialCameraPosition
+        scnView.pointOfView?.eulerAngles = initialCameraEulerAngles
         
         // Orienta la camera verso il marker
         let lookAtConstraint = SCNLookAtConstraint(target: node)
