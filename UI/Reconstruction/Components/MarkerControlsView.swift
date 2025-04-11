@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// Vista per i controlli dei marker fiduciali
+/// Vista per i controlli dei marker
 struct MarkerControlsView: View {
     // MARK: - Proprietà
-    let markerManager: FiducialMarkerManager
+    let markerManager: MarkerManager
     @Binding var markerMode: MarkerMode
     @Binding var activePlaneID: UUID?
     @Binding var showAllPlanes: Bool
@@ -80,13 +80,6 @@ struct MarkerControlsView: View {
                     
                     // Marker action buttons
                     HStack(spacing: 10) {
-                        Button(action: onUpdatePlane) {
-                            Label("Update Plane", systemImage: "square.3.stack.3d")
-                                .frame(minWidth: 120)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(activePlaneID == nil)
-                        
                         Button(action: onClearMarkers) {
                             Label("Clear Markers", systemImage: "xmark.circle")
                                 .frame(minWidth: 120)
