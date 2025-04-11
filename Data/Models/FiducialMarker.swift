@@ -2,144 +2,266 @@ import Foundation
 import SceneKit
 import simd
 
-/// Rappresenta un marker fiduciale nella scena 3D
+/// Represents a fiducial marker in the 3D scene
 struct FiducialMarker: Identifiable {
     let id: UUID
     var position: SCNVector3
     var name: String
+    var planeGroupID: UUID  // Add plane group identifier
     
-    init(position: SCNVector3, name: String = "") {
+    init(position: SCNVector3, name: String = "", planeGroupID: UUID) {
         self.id = UUID()
         self.position = position
         self.name = name.isEmpty ? "Marker \(UUID().uuidString.prefix(5))" : name
+        self.planeGroupID = planeGroupID
     }
 }
 
-/// Enumeration per le modalità di interazione con i marker fiduciali
-enum MarkerMode {
-    case view      // Solo visualizzazione
-    case add       // Aggiungi marker
-    case edit      // Modifica posizione marker
-    case delete    // Rimuovi marker
+/// Represents a cutting plane defined by markers
+struct CuttingPlane: Identifiable {
+    let id: UUID
+    var name: String
+    var color: NSColor
+    var node: SCNNode?
+    
+    init(id: UUID? = nil, name: String, color: NSColor) {
+        self.id = id ?? UUID()
+        self.name = name
+        self.color = color
+    }
 }
 
-/// Classe per gestire i marker fiduciali e il piano di taglio
+/// Enumeration for fiducial marker interaction modes
+enum MarkerMode {
+    case view      // View only
+    case add       // Add markers
+    case edit      // Edit marker positions
+    case delete    // Remove markers
+}
+
+/// Class to manage fiducial markers and cutting planes
 class FiducialMarkerManager {
-    // Collezione di marker fiduciali
+    // Collection of cutting planes
+    private(set) var cuttingPlanes: [CuttingPlane] = []
+    
+    // Collection of markers grouped by plane
     private(set) var markers: [FiducialMarker] = []
     
-    // Nodi SceneKit associati
+    // Currently active plane group
+    private(set) var activePlaneID: UUID?
+    
+    // SceneKit nodes associated with markers
     private var markerNodes: [UUID: SCNNode] = [:]
-    private var cuttingPlaneNode: SCNNode?
     
-    // Dimensione marker in punti
-    private let markerSize: CGFloat = 6.0
+    // Marker size in points
+    private let markerSize: CGFloat = 10.0
     
-    // Colori configurabili
-    var markerColor: NSColor = .systemRed
-    var planeColor: NSColor = NSColor(calibratedRed: 0.2, green: 0.6, blue: 1.0, alpha: 0.3)
-    var markerSelectedColor: NSColor = .systemYellow
+    // Default colors
+    var defaultMarkerColor: NSColor = .systemRed
+    var selectedMarkerColor: NSColor = .systemYellow
     
-    // Riferimento alla scena
+    // Reference to the scene
     private weak var scene: SCNScene?
     
-    // Marker attualmente selezionato
+    // Currently selected marker
     private(set) var selectedMarkerID: UUID?
     
-    /// Inizializza il manager con la scena
+    /// Initialize the manager with the scene
     init(scene: SCNScene) {
         self.scene = scene
+        
+        // Create two default cutting plane groups
+        let plane1 = CuttingPlane(name: "Cutting Plane 1", color: NSColor(calibratedRed: 0.2, green: 0.6, blue: 1.0, alpha: 0.3))
+        
+        cuttingPlanes = [plane1]
+        activePlaneID = plane1.id
     }
     
-    /// Aggiunge un nuovo marker fiduciale
+    /// Get markers belonging to a specific plane
+    func markers(forPlane planeID: UUID) -> [FiducialMarker] {
+        return markers.filter { $0.planeGroupID == planeID }
+    }
+    
+    /// Set the active plane for adding new markers
+    func setActivePlane(id: UUID) {
+        activePlaneID = id
+        selectedMarkerID = nil
+    }
+    
+    /// Add a new cutting plane
     @discardableResult
-    func addMarker(at position: SCNVector3, name: String = "") -> FiducialMarker {
-        let marker = FiducialMarker(position: position, name: name)
+    func addCuttingPlane(name: String, color: NSColor) -> UUID {
+        let newPlane = CuttingPlane(name: name, color: color)
+        cuttingPlanes.append(newPlane)
+        return newPlane.id
+    }
+    
+    /// Remove a cutting plane and its markers
+    func removeCuttingPlane(id: UUID) {
+        // Remove associated markers first
+        let planeMarkers = markers(forPlane: id)
+        for marker in planeMarkers {
+            removeMarker(id: marker.id)
+        }
+        
+        // Remove the plane node
+        if let planeIndex = cuttingPlanes.firstIndex(where: { $0.id == id }) {
+            if let node = cuttingPlanes[planeIndex].node {
+                node.removeFromParentNode()
+            }
+            cuttingPlanes.remove(at: planeIndex)
+        }
+        
+        // Update active plane if needed
+        if activePlaneID == id {
+            activePlaneID = cuttingPlanes.first?.id
+        }
+    }
+    
+    /// Get the color associated with a plane
+    func planeColor(id: UUID) -> NSColor {
+        if let plane = cuttingPlanes.first(where: { $0.id == id }) {
+            return plane.color
+        }
+        return defaultMarkerColor
+    }
+    
+    /// Add a new fiducial marker to the active plane
+    @discardableResult
+    func addMarker(at position: SCNVector3, name: String = "") -> FiducialMarker? {
+        guard let activePlaneID = activePlaneID else { return nil }
+        
+        // Verifica se abbiamo già 3 marker per questo piano
+        let planeMarkers = markers(forPlane: activePlaneID)
+        if planeMarkers.count >= 3 {
+            // Già 3 marker, non aggiungerne altri
+            return nil
+        }
+        
+        let marker = FiducialMarker(position: position, name: name.isEmpty ? "Marker \(planeMarkers.count + 1)" : name, planeGroupID: activePlaneID)
         markers.append(marker)
         createMarkerNode(for: marker)
-        updateCuttingPlane()
+        updateCuttingPlane(planeID: activePlaneID)
         return marker
     }
     
-    /// Rimuove un marker fiduciale
+    /// Remove a marker
     func removeMarker(id: UUID) {
         if let index = markers.firstIndex(where: { $0.id == id }) {
+            let planeID = markers[index].planeGroupID
             markers.remove(at: index)
             
-            // Rimuovi il nodo dalla scena
+            // Remove the node from the scene
             if let node = markerNodes[id] {
                 node.removeFromParentNode()
                 markerNodes.removeValue(forKey: id)
             }
             
-            // Se era selezionato, deseleziona
+            // If it was selected, deselect
             if selectedMarkerID == id {
                 selectedMarkerID = nil
             }
             
-            updateCuttingPlane()
+            updateCuttingPlane(planeID: planeID)
         }
     }
     
-    /// Rimuove tutti i marker
-    func removeAllMarkers() {
-        // Rimuovi tutti i nodi dalla scena
-        for (_, node) in markerNodes {
-            node.removeFromParentNode()
-        }
+    /// Remove all markers for a specific plane
+    func removeAllMarkers(forPlane planeID: UUID? = nil) {
+        let planeIDToUse = planeID ?? activePlaneID
         
-        // Rimuovi il piano di taglio
-        if let cuttingPlaneNode = cuttingPlaneNode {
-            cuttingPlaneNode.removeFromParentNode()
-            self.cuttingPlaneNode = nil
+        if let specificPlaneID = planeIDToUse {
+            // Remove markers for the specific plane
+            let markersToRemove = markers.filter { $0.planeGroupID == specificPlaneID }
+            for marker in markersToRemove {
+                if let node = markerNodes[marker.id] {
+                    node.removeFromParentNode()
+                    markerNodes.removeValue(forKey: marker.id)
+                }
+            }
+            
+            // Remove the plane node
+            if let planeIndex = cuttingPlanes.firstIndex(where: { $0.id == specificPlaneID }) {
+                if let node = cuttingPlanes[planeIndex].node {
+                    node.removeFromParentNode()
+                    cuttingPlanes[planeIndex].node = nil
+                }
+            }
+            
+            // Filter out the markers
+            markers = markers.filter { $0.planeGroupID != specificPlaneID }
+            
+            // Deselect if needed
+            if let selectedID = selectedMarkerID,
+               markersToRemove.contains(where: { $0.id == selectedID }) {
+                selectedMarkerID = nil
+            }
+        } else {
+            // Remove all markers from all planes
+            for (_, node) in markerNodes {
+                node.removeFromParentNode()
+            }
+            
+            // Remove all plane nodes
+            for i in 0..<cuttingPlanes.count {
+                if let node = cuttingPlanes[i].node {
+                    node.removeFromParentNode()
+                    cuttingPlanes[i].node = nil
+                }
+            }
+            
+            // Clear collections
+            markers.removeAll()
+            markerNodes.removeAll()
+            selectedMarkerID = nil
         }
-        
-        // Resetta le collezioni
-        markers.removeAll()
-        markerNodes.removeAll()
-        selectedMarkerID = nil
     }
     
-    /// Aggiorna la posizione di un marker
+    /// Update a marker's position
     func updateMarker(id: UUID, position: SCNVector3) {
         guard let index = markers.firstIndex(where: { $0.id == id }) else { return }
         
-        // Aggiorna la posizione nel modello
+        // Update position in the model
+        let planeID = markers[index].planeGroupID
         markers[index].position = position
         
-        // Aggiorna la posizione del nodo
+        // Update node position
         if let node = markerNodes[id] {
             node.position = position
         }
         
-        updateCuttingPlane()
+        updateCuttingPlane(planeID: planeID)
     }
     
-    /// Seleziona un marker
+    /// Select a marker
     func selectMarker(id: UUID?) {
-        // Deseleziona il marker corrente
+        // Deselect current marker
         if let selectedID = selectedMarkerID, let node = markerNodes[selectedID] {
             if let sphere = node.geometry as? SCNSphere {
-                sphere.firstMaterial?.diffuse.contents = markerColor
+                let markerPlaneID = markers.first(where: { $0.id == selectedID })?.planeGroupID
+                sphere.firstMaterial?.diffuse.contents = markerPlaneID.map { planeColor(id: $0) } ?? defaultMarkerColor
             }
         }
         
         selectedMarkerID = id
         
-        // Seleziona il nuovo marker
+        // Select new marker
         if let id = id, let node = markerNodes[id] {
             if let sphere = node.geometry as? SCNSphere {
-                sphere.firstMaterial?.diffuse.contents = markerSelectedColor
+                sphere.firstMaterial?.diffuse.contents = selectedMarkerColor
             }
         }
     }
     
-    /// Trova il marker più vicino a una posizione data
-    func findNearestMarker(to position: SCNVector3, maxDistance: Float = 10.0) -> UUID? {
+    /// Find the nearest marker to a given position
+    func findNearestMarker(to position: SCNVector3, maxDistance: Float = 10.0, planeID: UUID? = nil) -> UUID? {
         var nearestID: UUID? = nil
         var minDistance = Float.greatestFiniteMagnitude
         
-        for marker in markers {
+        let filteredMarkers = planeID != nil ?
+            markers.filter { $0.planeGroupID == planeID } : markers
+        
+        for marker in filteredMarkers {
             let distance = distanceBetween(marker.position, position)
             if distance < minDistance && distance < maxDistance {
                 minDistance = distance
@@ -150,123 +272,138 @@ class FiducialMarkerManager {
         return nearestID
     }
     
-    // MARK: - Metodi privati per la gestione dei nodi SceneKit
+    // MARK: - Private methods for managing SceneKit nodes
     
-    /// Crea un nodo visivo per un marker
+    /// Create a visual node for a marker
     private func createMarkerNode(for marker: FiducialMarker) {
         guard let scene = scene else { return }
         
-        // Crea una sfera per rappresentare il marker
+        // Create a sphere to represent the marker
         let sphere = SCNSphere(radius: markerSize / 2)
-        sphere.firstMaterial?.diffuse.contents = markerColor
-        sphere.firstMaterial?.lightingModel = .constant // Non influenzato dall'illuminazione
+        sphere.firstMaterial?.diffuse.contents = planeColor(id: marker.planeGroupID).withAlphaComponent(1.0)
+        sphere.firstMaterial?.lightingModel = .constant
         
-        // Crea il nodo
+        // Create the node
         let node = SCNNode(geometry: sphere)
         node.position = marker.position
         node.name = "fiducialMarker_\(marker.id.uuidString)"
         
-        // Aggiungi un'etichetta con il nome del marker
+        // Add a label with the marker name
         let textGeometry = SCNText(string: marker.name, extrusionDepth: 0)
-        textGeometry.font = NSFont.systemFont(ofSize: 2)
+        textGeometry.font = NSFont.systemFont(ofSize: 6)
         textGeometry.firstMaterial?.diffuse.contents = NSColor.white
         textGeometry.firstMaterial?.lightingModel = .constant
         
         let textNode = SCNNode(geometry: textGeometry)
         textNode.scale = SCNVector3(0.5, 0.5, 0.5)
-        textNode.position = SCNVector3(Float(markerSize), Float(markerSize), 0)
+        textNode.position = SCNVector3(Float(markerSize)/2, Float(markerSize)/2, 0)
         node.addChildNode(textNode)
         
-        // Aggiungi alla scena e alla mappa
+        // Add to scene and map
         scene.rootNode.addChildNode(node)
         markerNodes[marker.id] = node
     }
     
-    /// Aggiorna il piano di taglio in base ai marker attuali
-    func updateCuttingPlane() {
-        // Rimuovi il piano esistente
-        cuttingPlaneNode?.removeFromParentNode()
-        cuttingPlaneNode = nil
+    /// Update the cutting plane for a specific plane group
+    func updateCuttingPlane(planeID: UUID) {
+        // Get the cutting plane
+        guard let planeIndex = cuttingPlanes.firstIndex(where: { $0.id == planeID }) else { return }
         
-        // Sono necessari almeno 3 marker per definire un piano
-        guard markers.count >= 3, let scene = scene else { return }
+        // Remove existing plane node
+        if let node = cuttingPlanes[planeIndex].node {
+            node.removeFromParentNode()
+            cuttingPlanes[planeIndex].node = nil
+        }
         
-        // Calcola il centro del piano (media delle posizioni)
+        // Get markers for this plane
+        let planeMarkers = markers(forPlane: planeID)
+        
+        // Need at least 3 markers to define a plane
+        guard planeMarkers.count >= 3, let scene = scene else { return }
+        
+        // Calculate plane center (average of positions)
         var centerX: CGFloat = 0
         var centerY: CGFloat = 0
         var centerZ: CGFloat = 0
         
-        for marker in markers {
+        for marker in planeMarkers {
             centerX += marker.position.x
             centerY += marker.position.y
             centerZ += marker.position.z
         }
         
-        centerX /= CGFloat(markers.count)
-        centerY /= CGFloat(markers.count)
-        centerZ /= CGFloat(markers.count)
+        centerX /= CGFloat(planeMarkers.count)
+        centerY /= CGFloat(planeMarkers.count)
+        centerZ /= CGFloat(planeMarkers.count)
         
         let center = SCNVector3(centerX, centerY, centerZ)
         
-        // Calcola i vettori normali al piano
-        let points = markers.map { simd_float3(Float($0.position.x), Float($0.position.y), Float($0.position.z)) }
+        // Calculate normal vectors to the plane
+        let points = planeMarkers.map { simd_float3(Float($0.position.x), Float($0.position.y), Float($0.position.z)) }
         guard let normalVector = calculatePlaneNormal(from: points) else { return }
         
-        // Determina la dimensione del piano in base alla distanza tra i marker
-        let maxDistance = findMaxDistance(between: markers.map { $0.position })
-        let planeSize = CGFloat(maxDistance * 1.5) // Piano leggermente più grande della regione dei marker
+        // Determine plane size based on distance between markers
+        let maxDistance = findMaxDistance(between: planeMarkers.map { $0.position })
+        let planeSize = CGFloat(maxDistance * 3)
         
-        // Crea il piano
+        // Create the plane
         let plane = SCNPlane(width: planeSize, height: planeSize)
-        plane.firstMaterial?.diffuse.contents = planeColor
-        plane.firstMaterial?.isDoubleSided = true // Visibile da entrambi i lati
+        plane.firstMaterial?.diffuse.contents = cuttingPlanes[planeIndex].color
+        plane.firstMaterial?.isDoubleSided = true
         
-        // Crea il nodo del piano
+        // Create the plane node
         let planeNode = SCNNode(geometry: plane)
         planeNode.position = center
-        planeNode.name = "cuttingPlane"
+        planeNode.name = "cuttingPlane_\(planeID.uuidString)"
         
-        // Orienta il piano perpendicolare al vettore normale
+        // Orient the plane perpendicular to the normal vector
         orientNodeToNormal(planeNode, normal: SCNVector3(normalVector.x, normalVector.y, normalVector.z))
         
-        // Aggiungi alla scena
+        // Add to scene
         scene.rootNode.addChildNode(planeNode)
-        cuttingPlaneNode = planeNode
+        cuttingPlanes[planeIndex].node = planeNode
     }
     
-    /// Orienta un nodo in modo che sia perpendicolare a un vettore normale
+    /// Update all cutting planes
+    func updateAllCuttingPlanes() {
+        for plane in cuttingPlanes {
+            updateCuttingPlane(planeID: plane.id)
+        }
+    }
+    
+    /// Orient a node to be perpendicular to a normal vector
     private func orientNodeToNormal(_ node: SCNNode, normal: SCNVector3) {
-        // Vettore di riferimento (solitamente [0,0,1] per un piano SCNPlane)
+        // Reference vector (usually [0,0,1] for an SCNPlane)
         let planeNormal = SCNVector3(0, 0, 1)
         
-        // Calcola l'asse di rotazione
+        // Calculate rotation axis
         let rotationAxis = crossProduct(planeNormal, normal)
         
-        if length(rotationAxis) > 0.001 {  // Evita la divisione per zero
-            // Calcola l'angolo tra i vettori
+        if length(rotationAxis) > 0.001 {  // Avoid division by zero
+            // Calculate angle between vectors
             let dotProduct = dotProduct(planeNormal, normal)
             let normalLength = length(normal)
             let angle = acos(dotProduct / normalLength)
             
-            // Crea una rotazione attorno all'asse
+            // Create rotation around axis
             node.rotation = SCNVector4(rotationAxis.x, rotationAxis.y, rotationAxis.z, CGFloat(angle))
         }
     }
     
-    /// Calcola il vettore normale al piano definito dai punti
+    /// Calculate plane normal vector from points
     private func calculatePlaneNormal(from points: [simd_float3]) -> simd_float3? {
         guard points.count >= 3 else { return nil }
         
-        // Usa i primi tre punti per definire due vettori sul piano
+        // Use first three points to define two vectors on the plane
         let v1 = points[1] - points[0]
         let v2 = points[2] - points[0]
         
-        // Il prodotto vettoriale dà il vettore normale
+        // Cross product gives the normal vector
         let normal = simd_normalize(simd_cross(v1, v2))
         return normal
     }
     
-    /// Trova la distanza massima tra le coppie di marker
+    /// Find maximum distance between pairs of markers
     private func findMaxDistance(between positions: [SCNVector3]) -> Float {
         var maxDist: Float = 0
         
@@ -280,9 +417,9 @@ class FiducialMarkerManager {
         return maxDist
     }
     
-    // MARK: - Funzioni di calcolo vettoriale
+    // MARK: - Vector calculation functions
     
-    /// Calcola la distanza tra due punti
+    /// Calculate distance between two points
     private func distanceBetween(_ v1: SCNVector3, _ v2: SCNVector3) -> Float {
         let dx = Float(v2.x - v1.x)
         let dy = Float(v2.y - v1.y)
@@ -296,7 +433,7 @@ class FiducialMarkerManager {
         return sqrt(sumOfSquares)
     }
     
-    /// Calcola la lunghezza di un vettore
+    /// Calculate vector length
     private func length(_ v: SCNVector3) -> Float {
         let xFloat = Float(v.x)
         let yFloat = Float(v.y)
@@ -310,7 +447,7 @@ class FiducialMarkerManager {
         return sqrt(sumOfSquares)
     }
     
-    /// Calcola il prodotto scalare tra due vettori
+    /// Calculate dot product between vectors
     private func dotProduct(_ v1: SCNVector3, _ v2: SCNVector3) -> Float {
         let xProduct = Float(v1.x) * Float(v2.x)
         let yProduct = Float(v1.y) * Float(v2.y)
@@ -319,7 +456,7 @@ class FiducialMarkerManager {
         return xProduct + yProduct + zProduct
     }
     
-    /// Calcola il prodotto vettoriale tra due vettori
+    /// Calculate cross product between vectors
     private func crossProduct(_ v1: SCNVector3, _ v2: SCNVector3) -> SCNVector3 {
         return SCNVector3(
             v1.y * v2.z - v1.z * v2.y,
