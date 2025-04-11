@@ -38,6 +38,7 @@ struct Model3DView: View {
                         onUpdatePlane: viewModel.updatePlane,
                         onClearMarkers: viewModel.clearMarkers
                     )
+                    .id("markerControls-\(markerManager.markers.count)") // Force refresh when markers change
                 }
             }
             .padding(12)
@@ -78,11 +79,45 @@ struct Model3DView: View {
     
     // MARK: - Setup
     private func setupNotifications() {
+        // Notifica per limite di marker raggiunto
         NotificationCenter.default.addObserver(
             forName: NSNotification.Name("MarkerLimitReached"),
             object: nil,
             queue: .main) { _ in
                 viewModel.showMarkerLimitAlert = true
+            }
+        
+        // Notifiche per aggiornamenti dei marker
+        NotificationCenter.default.addObserver(
+            forName: MarkerManager.markerAdded,
+            object: nil,
+            queue: .main) { _ in
+                // Forza aggiornamento della vista
+                viewModel.objectWillChange.send()
+            }
+        
+        NotificationCenter.default.addObserver(
+            forName: MarkerManager.markerRemoved,
+            object: nil,
+            queue: .main) { _ in
+                // Forza aggiornamento della vista
+                viewModel.objectWillChange.send()
+            }
+        
+        NotificationCenter.default.addObserver(
+            forName: MarkerManager.markerUpdated,
+            object: nil,
+            queue: .main) { _ in
+                // Forza aggiornamento della vista
+                viewModel.objectWillChange.send()
+            }
+        
+        NotificationCenter.default.addObserver(
+            forName: MarkerManager.markersCleared,
+            object: nil,
+            queue: .main) { _ in
+                // Forza aggiornamento della vista
+                viewModel.objectWillChange.send()
             }
     }
 }
