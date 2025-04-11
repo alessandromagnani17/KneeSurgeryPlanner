@@ -50,24 +50,24 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
-		F871E2162D91675300BBB76C /* Data */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Data;
-			sourceTree = "<group>";
-		};
 		F871E2192D91677C00BBB76C /* UI */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = UI;
 			sourceTree = "<group>";
 		};
-		F871E21D2D91679D00BBB76C /* Rendering */ = {
+		F8C0F2732DA95E06005B0C4E /* Models */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Rendering;
+			path = Models;
 			sourceTree = "<group>";
 		};
-		F871E2202D9167B800BBB76C /* Utilities */ = {
+		F8C0F28F2DA95FC6005B0C4E /* Services */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Utilities;
+			path = Services;
+			sourceTree = "<group>";
+		};
+		F8C0F2AD2DA960F1005B0C4E /* Utils */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Utils;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -100,10 +100,10 @@
 		F871E1C52D915ED000BBB76C = {
 			isa = PBXGroup;
 			children = (
-				F871E2202D9167B800BBB76C /* Utilities */,
-				F871E21D2D91679D00BBB76C /* Rendering */,
+				F8C0F2AD2DA960F1005B0C4E /* Utils */,
+				F8C0F28F2DA95FC6005B0C4E /* Services */,
+				F8C0F2732DA95E06005B0C4E /* Models */,
 				F871E2192D91677C00BBB76C /* UI */,
-				F871E2162D91675300BBB76C /* Data */,
 				F871E1D02D915ED000BBB76C /* KneeSurgeryPlanner */,
 				F871E1E22D915ED300BBB76C /* KneeSurgeryPlannerTests */,
 				F871E1EC2D915ED300BBB76C /* KneeSurgeryPlannerUITests */,
@@ -140,10 +140,10 @@
 			fileSystemSynchronizedGroups = (
 				F871E1D02D915ED000BBB76C /* KneeSurgeryPlanner */,
 				F871E2152D91674600BBB76C /* Resources */,
-				F871E2162D91675300BBB76C /* Data */,
 				F871E2192D91677C00BBB76C /* UI */,
-				F871E21D2D91679D00BBB76C /* Rendering */,
-				F871E2202D9167B800BBB76C /* Utilities */,
+				F8C0F2732DA95E06005B0C4E /* Models */,
+				F8C0F28F2DA95FC6005B0C4E /* Services */,
+				F8C0F2AD2DA960F1005B0C4E /* Utils */,
 			);
 			name = KneeSurgeryPlanner;
 			packageProductDependencies = (
