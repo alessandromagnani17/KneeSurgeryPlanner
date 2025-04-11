@@ -9,6 +9,9 @@ struct MarkerListView: View {
     // Callback per quando un marker viene selezionato dalla lista
     var onMarkerSelected: (Marker) -> Void
     
+    // Aggiungi uno state per tenere traccia del marker selezionato a livello di vista
+    @State private var localSelectedMarkerID: UUID? = nil
+    
     // MARK: - UI
     var body: some View {
         VStack {
@@ -34,26 +37,33 @@ struct MarkerListView: View {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
                                 ForEach(planeMarkers) { marker in
-                                    HStack(spacing: 4) {
+                                    Button(action: {
+                                        // Prima aggiorna lo stato locale della vista
+                                        localSelectedMarkerID = marker.id
+                                        
+                                        // Poi aggiorna il modello
+                                        markerManager.selectMarker(id: marker.id)
+                                        
+                                        // Infine chiama il callback
+                                        onMarkerSelected(marker)
+                                    }) {
                                         Text(marker.name)
                                             .font(.system(size: 12))
+                                            .padding(.vertical, 4)
+                                            .padding(.horizontal, 8)
+                                            .background(Color(plane.color).opacity(0.15))
+                                            .cornerRadius(16)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 16)
+                                                    // Usa sia lo state locale che quello del model
+                                                    .stroke(localSelectedMarkerID == marker.id ||
+                                                            markerManager.selectedMarkerID == marker.id
+                                                            ? Color.yellow : Color.clear, lineWidth: 2)
+                                            )
                                     }
-                                    .padding(.vertical, 4)
-                                    .padding(.horizontal, 8)
-                                    .background(Color(plane.color).opacity(0.15))
-                                    .cornerRadius(16)
-                                    .contentShape(Rectangle()) // Assicura che l'intera area sia cliccabile
-                                    .onTapGesture {
-                                        // Quando un marker viene cliccato, richiama il callback
-                                        onMarkerSelected(marker)
-                                        // Seleziona anche il marker nel MarkerManager
-                                        markerManager.selectMarker(id: marker.id)
-                                    }
-                                    // Evidenzia il marker se è selezionato
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 16)
-                                            .stroke(markerManager.selectedMarkerID == marker.id ? Color.yellow : Color.clear, lineWidth: 2)
-                                    )
+                                    .buttonStyle(PlainButtonStyle())
+                                    // Aggiungi un ID molto specifico che cambia quando qualsiasi selezione cambia
+                                    .id("marker-\(marker.id)-selected-\(localSelectedMarkerID == marker.id)-\(markerManager.selectedMarkerID == marker.id)")
                                 }
                             }
                             .padding(.horizontal, 2)
@@ -74,6 +84,15 @@ struct MarkerListView: View {
                 }
             }
         }
-        .id("markerList-\(markerManager.markers.count)")
+        // Sincronizza lo state locale con il modello quando cambia la selezione nel modello
+        .onChange(of: markerManager.selectedMarkerID) { _, newValue in
+            localSelectedMarkerID = newValue
+        }
+        // Forza l'aggiornamento quando cambia lo stato locale
+        .id("markerList-\(localSelectedMarkerID?.uuidString ?? "none")-\(markerManager.selectedMarkerID?.uuidString ?? "none")")
+        // Inizializza lo stato locale con il valore attuale dal modello all'apparizione
+        .onAppear {
+            localSelectedMarkerID = markerManager.selectedMarkerID
+        }
     }
 }
