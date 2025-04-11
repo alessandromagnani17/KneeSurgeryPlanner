@@ -77,6 +77,17 @@ class Model3DViewModel: ObservableObject {
         SCNTransaction.commit()
     }
     
+    /// Focalizza la camera su un marker specifico
+    func focusCameraOnMarker(_ marker: Marker) {
+        guard let markerManager = markerManager, let scnView = scnView else { return }
+        
+        // Imposta il piano attivo al piano del marker
+        activePlaneID = marker.planeGroupID
+        
+        // Utilizza il MarkerManager per spostare la camera
+        markerManager.focusCameraOnMarker(markerId: marker.id, scnView: scnView)
+    }
+    
     /// Aggiunge un nuovo piano di taglio
     func addNewPlane() {
         guard let markerManager = markerManager else { return }
