@@ -28,6 +28,10 @@ struct Model3DView: View {
     // Stato dei marker fiduciali
     @State private var markerMode: MarkerMode = .view
     @State private var markerManager: FiducialMarkerManager?
+    @State private var showMarkerLimitAlert = false
+
+    @State private var activePlaneID: UUID?
+    @State private var showAllPlanes: Bool = true
     
     @State private var isModelInitialized = false
     @State private var isExporting = false
@@ -45,8 +49,8 @@ struct Model3DView: View {
             // Control panels with consistent styling
             VStack(spacing: 8) {
                 renderingControlsView
-                Divider()
-                drawingControlsView
+                /*Divider()
+                drawingControlsView*/
                 
                 if let markerManager = markerManager {
                     Divider()
@@ -71,7 +75,31 @@ struct Model3DView: View {
             if markerManager == nil && !scene.rootNode.childNodes.isEmpty {
                 // Inizializza il manager dei marker quando la scena è pronta
                 markerManager = FiducialMarkerManager(scene: scene)
+                // Set the active plane ID to the first available plane
+                if let firstPlane = markerManager?.cuttingPlanes.first {
+                    activePlaneID = firstPlane.id
+                    markerManager?.setActivePlane(id: firstPlane.id)
+                }
             }
+            
+            // Aggiungi l'observer per il limite dei marker
+            NotificationCenter.default.addObserver(forName: NSNotification.Name("MarkerLimitReached"), object: nil, queue: .main) { _ in
+                self.showMarkerLimitAlert = true
+            }
+        }
+        .onChange(of: showAllPlanes) { _, _ in
+            updatePlaneVisibility()
+        }
+        .onChange(of: activePlaneID) { _, newID in
+            if let markerManager = markerManager, let newID = newID {
+                markerManager.setActivePlane(id: newID)
+                updatePlaneVisibility()
+            }
+        }
+        .alert("Marker Limit Reached", isPresented: $showMarkerLimitAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Each cutting plane can have a maximum of 3 markers.")
         }
     }
 
@@ -157,7 +185,7 @@ struct Model3DView: View {
     }
 
     /// Controlli per il disegno sul modello
-    private var drawingControlsView: some View {
+    /*private var drawingControlsView: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Section header
             Text("Drawing Tools")
@@ -247,18 +275,59 @@ struct Model3DView: View {
                 }
             }
         }
-    }
+    }*/
 
     /// Controlli per i marker fiduciali
     private func markerControlsView(manager: FiducialMarkerManager) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             // Section header
-            Text("Fiducial Markers & Cutting Plane")
+            Text("Fiducial Markers & Cutting Planes")
                 .font(.subheadline)
                 .fontWeight(.medium)
                 .foregroundColor(.secondary)
             
-            VStack(spacing: 8) {
+            VStack(spacing: 12) {
+                HStack(spacing: 16) {
+                    Text("Active Plane:")
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
+                    
+                    // Plane picker with colored indicators
+                    Picker("", selection: $activePlaneID) {
+                        ForEach(manager.cuttingPlanes) { plane in
+                            HStack {
+                                Circle()
+                                    .fill(Color(plane.color))
+                                    .frame(width: 12, height: 12)
+                                Text(plane.name)
+                            }
+                            .tag(plane.id as UUID?)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                    .frame(width: 200)
+                    .onChange(of: activePlaneID) { _, newID in
+                        if let newID = newID {
+                            manager.setActivePlane(id: newID)
+                        }
+                    }
+                    
+                    Button(action: addNewPlane) {
+                        Label("Add Plane", systemImage: "plus")
+                    }
+                    .buttonStyle(.bordered)
+                    
+                    Spacer()
+                    
+                    // Show all planes toggle
+                    Toggle(isOn: $showAllPlanes) {
+                        Label("Show All Planes", systemImage: "eye")
+                    }
+                    .toggleStyle(.button)
+                    .controlSize(.small)
+                }
+                
+                // Controlli modalità marker - QUESTA PARTE RIMANE QUASI UGUALE
                 HStack(spacing: 16) {
                     // Marker mode selector
                     VStack(alignment: .leading, spacing: 4) {
@@ -278,49 +347,84 @@ struct Model3DView: View {
                     
                     Spacer()
                     
-                    // Marker action buttons
+                    // Marker action buttons - MODIFICARE QUESTI BOTTONI
                     HStack(spacing: 10) {
-                        Button(action: { manager.updateCuttingPlane() }) {
+                        Button(action: {
+                            if let activePlaneID = activePlaneID {
+                                manager.updateCuttingPlane(planeID: activePlaneID)
+                            }
+                        }) {
                             Label("Update Plane", systemImage: "square.3.stack.3d")
                                 .frame(minWidth: 120)
                         }
                         .buttonStyle(.bordered)
+                        .disabled(activePlaneID == nil)
                         
-                        Button(action: { manager.removeAllMarkers() }) {
+                        Button(action: {
+                            if let activePlaneID = activePlaneID {
+                                manager.removeAllMarkers(forPlane: activePlaneID)
+                            }
+                        }) {
                             Label("Clear Markers", systemImage: "xmark.circle")
                                 .frame(minWidth: 120)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(manager.markers.isEmpty)
+                        .disabled(activePlaneID == nil ||
+                                 (activePlaneID != nil && manager.markers(forPlane: activePlaneID!).isEmpty))
                     }
                 }
                 
-                // Markers list
-                if !manager.markers.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Placed Markers:")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                        
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(manager.markers) { marker in
-                                    HStack(spacing: 4) {
-                                        Circle()
-                                            .fill(Color.red)
-                                            .frame(width: 8, height: 8)
-                                        Text(marker.name)
-                                            .font(.system(size: 12))
-                                    }
-                                    .padding(.vertical, 4)
-                                    .padding(.horizontal, 8)
-                                    .background(Color.blue.opacity(0.15))
-                                    .cornerRadius(16)
+                // SOSTITUIRE COMPLETAMENTE LA LISTA DEI MARKER
+                // Markers list raggruppati per piano
+                VStack {
+                    ForEach(manager.cuttingPlanes) { plane in
+                        let planeMarkers = manager.markers(forPlane: plane.id)
+                        if !planeMarkers.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                // Group header
+                                HStack {
+                                    Circle()
+                                        .fill(Color(plane.color))
+                                        .frame(width: 8, height: 8)
+                                    Text(plane.name)
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(plane.id == activePlaneID ? .primary : .secondary)
+                                    
+                                    Text("(\(planeMarkers.count) markers)")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.secondary)
                                 }
+                                
+                                // Marker list
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 8) {
+                                        ForEach(planeMarkers) { marker in
+                                            HStack(spacing: 4) {
+                                                Text(marker.name)
+                                                    .font(.system(size: 12))
+                                            }
+                                            .padding(.vertical, 4)
+                                            .padding(.horizontal, 8)
+                                            .background(Color(plane.color).opacity(0.15))
+                                            .cornerRadius(16)
+                                        }
+                                    }
+                                    .padding(.horizontal, 2)
+                                }
+                                .frame(height: 30)
                             }
-                            .padding(.horizontal, 2)
+                            .padding(.vertical, 4)
+                            .padding(.horizontal, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color(plane.color).opacity(0.05))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color(plane.color).opacity(0.2), lineWidth: 1)
+                            )
+                            .id("\(plane.id)-\(planeMarkers.count)")
                         }
-                        .frame(height: 30)
                     }
                 }
             }
@@ -742,7 +846,7 @@ struct Model3DView: View {
             // 2. Mostra un pannello e ottieni l'autorizzazione dell'utente
             let savePanel = NSSavePanel()
             savePanel.title = "Esporta modello 3D con marker fiduciali"
-            savePanel.nameFieldStringValue = "brain_model_with_markers.scn"
+            savePanel.nameFieldStringValue = "model_with_markers.scn"
             savePanel.allowedFileTypes = ["scn"]
             savePanel.canCreateDirectories = true
             
@@ -802,10 +906,12 @@ struct Model3DView: View {
                 }
                 
                 // Aggiungi il piano di taglio se esiste
-                if let cuttingPlaneNode = scene.rootNode.childNode(withName: "cuttingPlane", recursively: true) {
-                    exportScene.rootNode.addChildNode(cuttingPlaneNode.clone())
+                for plane in markerManager.cuttingPlanes {
+                    if let planeNode = plane.node?.clone() {
+                        exportScene.rootNode.addChildNode(planeNode)
+                    }
                 }
-                
+
                 // Aggiungi le linee di disegno
                 for drawingLine in drawingLines {
                     // Clona ciascun nodo linea
@@ -856,6 +962,50 @@ struct Model3DView: View {
         
         // Svuota l'array
         drawingLines.removeAll()
+    }
+    
+    // Add this function to add a new cutting plane
+    private func addNewPlane() {
+        guard let markerManager = markerManager else { return }
+        
+        let planeCount = markerManager.cuttingPlanes.count
+        
+        // Create colors that are visually distinct
+        let colors = [
+            NSColor(calibratedRed: 0.2, green: 0.6, blue: 1.0, alpha: 0.3),  // Blue
+            NSColor(calibratedRed: 1.0, green: 0.4, blue: 0.4, alpha: 0.3),  // Red
+            NSColor(calibratedRed: 0.2, green: 0.8, blue: 0.2, alpha: 0.3),  // Green
+            NSColor(calibratedRed: 0.8, green: 0.6, blue: 0.1, alpha: 0.3),  // Orange
+            NSColor(calibratedRed: 0.6, green: 0.2, blue: 0.8, alpha: 0.3),  // Purple
+            NSColor(calibratedRed: 0.8, green: 0.3, blue: 0.6, alpha: 0.3)   // Pink
+        ]
+        
+        // Use modulo to cycle through colors for planes beyond our predefined set
+        let colorIndex = planeCount % colors.count
+        let color = colors[colorIndex]
+        
+        let newPlaneID = markerManager.addCuttingPlane(name: "Cutting Plane \(planeCount + 1)", color: color)
+        activePlaneID = newPlaneID
+    }
+    
+    // Add this function to handle showing/hiding planes based on the toggle
+    private func updatePlaneVisibility() {
+        guard let markerManager = markerManager else { return }
+        
+        if showAllPlanes {
+            // Show all planes
+            markerManager.updateAllCuttingPlanes()
+        } else {
+            // Show only the active plane
+            for plane in markerManager.cuttingPlanes {
+                if plane.id == activePlaneID {
+                    markerManager.updateCuttingPlane(planeID: plane.id)
+                } else if let node = plane.node {
+                    // Hide other planes
+                    node.isHidden = true
+                }
+            }
+        }
     }
     
     /// Annulla l'ultima linea disegnata
