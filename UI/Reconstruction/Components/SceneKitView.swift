@@ -13,6 +13,7 @@ struct SceneKitView: NSViewRepresentable {
     func makeNSView(context: Context) -> SCNView {
         let view = SCNView()
         view.scene = scene
+        
         view.allowsCameraControl = allowsCameraControl
         view.autoenablesDefaultLighting = autoenablesDefaultLighting
         view.backgroundColor = NSColor.darkGray
