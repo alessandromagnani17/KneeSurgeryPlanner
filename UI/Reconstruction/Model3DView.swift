@@ -18,13 +18,6 @@ struct Model3DView: View {
     @State private var scnView: SCNView?
     @State private var renderingMode: RenderingMode = .solid
     
-    // Stato del painter 3D
-    @State private var drawingMode: DrawingMode = .none
-    @State private var lineStyle: LineStyle = .freehand
-    @State private var currentDrawingColor: NSColor = .red
-    @State private var lineThickness: Float = 1.0
-    @State private var drawingLines: [DrawingLine] = []
-    
     // Stato dei marker fiduciali
     @State private var markerMode: MarkerMode = .view
     @State private var markerManager: FiducialMarkerManager?
@@ -182,7 +175,6 @@ struct Model3DView: View {
         }
     }
 
-   
     /// Controlli per i marker fiduciali
     private func markerControlsView(manager: FiducialMarkerManager) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -346,11 +338,6 @@ struct Model3DView: View {
                 scene: scene,
                 allowsCameraControl: true,
                 autoenablesDefaultLighting: false,
-                drawingMode: drawingMode,
-                lineStyle: lineStyle,
-                currentDrawingColor: currentDrawingColor,
-                lineThickness: lineThickness,
-                drawingLines: $drawingLines,
                 onSceneViewCreated: { view in
                     self.scnView = view
                 }
@@ -853,21 +840,6 @@ struct Model3DView: View {
                 }
             }
         }
-    }
-    
-    // MARK: - Gestione del Disegno 3D
-    
-    /// Cancella tutte le linee disegnate
-    private func clearAllDrawings() {
-        // Rimuovi tutti i nodi di disegno dalla scena
-        for line in drawingLines {
-            for node in line.nodes {
-                node.removeFromParentNode()
-            }
-        }
-        
-        // Svuota l'array
-        drawingLines.removeAll()
     }
     
     // Add this function to add a new cutting plane
