@@ -77,11 +77,16 @@ struct SceneKitMarkerView: NSViewRepresentable {
             let location = gesture.location(in: scnView)
             let hitResults = scnView.hitTest(location, options: parent.hitTestOptions)
             
-            // Filtra i risultati per escludere i marker stessi se stiamo aggiungendo nuovi marker
+            // Filtra i risultati per includere solo il modello volumeMesh e escludere i marker esistenti
             let results = hitResults.filter { result in
                 if markerMode == .add {
-                    // Quando stiamo aggiungendo, ignora i nodi dei marker esistenti
-                    return !(result.node.name?.starts(with: "fiducialMarker_") ?? false)
+                    // Quando stiamo aggiungendo, ignora i nodi dei marker esistenti e i piani di taglio
+                    // e permetti solo hit sul modello volumeMesh o il suo outline
+                    let name = result.node.name ?? ""
+                    let isMarker = name.starts(with: "fiducialMarker_")
+                    let isPlane = name.starts(with: "cuttingPlane_")
+                    let isModel = name == "volumeMesh" || name == "outlineNode" || result.node.parent?.name == "volumeMesh"
+                    return !isMarker && !isPlane && isModel
                 }
                 return true
             }
@@ -92,8 +97,13 @@ struct SceneKitMarkerView: NSViewRepresentable {
             // Gestisci l'interazione in base alla modalità
             switch markerMode {
             case .add:
-                // Aggiungi un nuovo marker alla posizione del click
-                parent.markerManager.addMarker(at: result.worldCoordinates)
+                let added = parent.markerManager.addMarker(at: result.worldCoordinates)
+                if added == nil {
+                    // Non è stato possibile aggiungere il marker (limite raggiunto)
+                    DispatchQueue.main.async {
+                        NotificationCenter.default.post(name: NSNotification.Name("MarkerLimitReached"), object: nil)
+                    }
+                }
                 
             case .edit:
                 // Verifica se abbiamo cliccato su un marker esistente
@@ -148,7 +158,7 @@ struct SceneKitMarkerView: NSViewRepresentable {
             // Filtra risultati per escludere marker e piani
             let results = hitResults.filter { result in
                 let name = result.node.name ?? ""
-                return !name.starts(with: "fiducialMarker_") && name != "cuttingPlane"
+                return !name.starts(with: "fiducialMarker_") && !name.starts(with: "cuttingPlane_")
             }
             
             // Aggiorna la posizione del marker se c'è un punto valido
