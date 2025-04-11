@@ -3,7 +3,7 @@ import SwiftUI
 /// Vista per i controlli dei marker
 struct MarkerControlsView: View {
     // MARK: - Proprietà
-    let markerManager: MarkerManager
+    @ObservedObject var markerManager: MarkerManager
     @Binding var markerMode: MarkerMode
     @Binding var activePlaneID: UUID?
     @Binding var showAllPlanes: Bool
@@ -12,6 +12,7 @@ struct MarkerControlsView: View {
     var onAddNewPlane: () -> Void
     var onUpdatePlane: () -> Void
     var onClearMarkers: () -> Void
+    var onMarkerSelected: (Marker) -> Void  // Nuovo callback per la selezione del marker
     
     // MARK: - UI
     var body: some View {
@@ -91,7 +92,11 @@ struct MarkerControlsView: View {
                 }
                 
                 // Markers list raggruppati per piano
-                MarkerListView(markerManager: markerManager, activePlaneID: activePlaneID)
+                MarkerListView(
+                    markerManager: markerManager,
+                    activePlaneID: activePlaneID,
+                    onMarkerSelected: onMarkerSelected
+                )
             }
         }
     }
