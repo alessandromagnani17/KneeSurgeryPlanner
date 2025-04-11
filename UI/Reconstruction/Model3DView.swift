@@ -795,15 +795,6 @@ struct Model3DView: View {
                         exportScene.rootNode.addChildNode(planeNode)
                     }
                 }
-
-                // Aggiungi le linee di disegno
-                for drawingLine in drawingLines {
-                    // Clona ciascun nodo linea
-                    for lineNode in drawingLine.nodes {
-                        let clonedLineNode = lineNode.clone()
-                        exportScene.rootNode.addChildNode(clonedLineNode)
-                    }
-                }
                 
                 // 6. Aggiungi una luce per migliorare la visualizzazione
                 let lightNode = SCNNode()
