@@ -1,13 +1,13 @@
 import SwiftUI
 import SceneKit
 
-/// Vista di SceneKit con supporto per l'aggiunta e modifica di marker fiduciali
+/// Vista di SceneKit con supporto per l'aggiunta e modifica di marker
 struct SceneKitMarkerView: NSViewRepresentable {
     var scene: SCNScene
     var allowsCameraControl: Bool
     var autoenablesDefaultLighting: Bool
     var markerMode: MarkerMode
-    var markerManager: FiducialMarkerManager
+    var markerManager: MarkerManager
     var onSceneViewCreated: ((SCNView) -> Void)?
     
     private var hitTestOptions: [SCNHitTestOption: Any] {
@@ -21,7 +21,7 @@ struct SceneKitMarkerView: NSViewRepresentable {
          allowsCameraControl: Bool = true,
          autoenablesDefaultLighting: Bool = true,
          markerMode: MarkerMode = .view,
-         markerManager: FiducialMarkerManager,
+         markerManager: MarkerManager,
          onSceneViewCreated: ((SCNView) -> Void)? = nil) {
         
         self.scene = scene
@@ -46,7 +46,9 @@ struct SceneKitMarkerView: NSViewRepresentable {
         let clickGesture = NSClickGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleClick(_:)))
         view.addGestureRecognizer(clickGesture)
         
-        onSceneViewCreated?(view)
+        DispatchQueue.global(qos: .userInteractive).async {
+                    self.onSceneViewCreated?(view)
+                }
         return view
     }
     
@@ -63,111 +65,114 @@ struct SceneKitMarkerView: NSViewRepresentable {
     class Coordinator: NSObject, SCNSceneRendererDelegate {
         var parent: SceneKitMarkerView
         var markerMode: MarkerMode
-        var isDragging = false
-        var currentDragMarkerID: UUID?
+        var selectedMarkerID: UUID? // Rinominato da currentDragMarkerID per chiarezza
         
         init(_ parent: SceneKitMarkerView) {
             self.parent = parent
             self.markerMode = parent.markerMode
+            super.init()
         }
         
         @objc func handleClick(_ gesture: NSClickGestureRecognizer) {
-            guard let scnView = gesture.view as? SCNView else { return }
+            guard let scnView = gesture.view as? SCNView else {
+                print("Non è stato possibile ottenere la SCNView")
+                return
+            }
             
             let location = gesture.location(in: scnView)
             let hitResults = scnView.hitTest(location, options: parent.hitTestOptions)
             
-            // Filtra i risultati per includere solo il modello volumeMesh e escludere i marker esistenti
-            let results = hitResults.filter { result in
-                if markerMode == .add {
-                    // Quando stiamo aggiungendo, ignora i nodi dei marker esistenti e i piani di taglio
-                    // e permetti solo hit sul modello volumeMesh o il suo outline
-                    let name = result.node.name ?? ""
-                    let isMarker = name.starts(with: "fiducialMarker_")
-                    let isPlane = name.starts(with: "cuttingPlane_")
-                    let isModel = name == "volumeMesh" || name == "outlineNode" || result.node.parent?.name == "volumeMesh"
-                    return !isMarker && !isPlane && isModel
-                }
-                return true
+            // Filtra i risultati per escludere i piani di taglio
+            let filteredResults = hitResults.filter { result in
+                let nodeName = result.node.name ?? ""
+                // Esclude i nodi che iniziano con "cuttingPlane_"
+                return !nodeName.starts(with: "cuttingPlane_")
+            }
+            
+            // Debug - stampa i risultati del hit test
+            print("Hit test results (filtered): \(filteredResults.count)")
+            for (index, result) in filteredResults.enumerated() {
+                print("Result \(index): node name = \(result.node.name ?? "unnamed"), coordinates = \(result.worldCoordinates)")
             }
             
             // Se non abbiamo un risultato valido, esci
-            guard let result = results.first else { return }
+            guard let result = filteredResults.first else {
+                print("Nessun risultato valido trovato")
+                return
+            }
             
             // Gestisci l'interazione in base alla modalità
             switch markerMode {
             case .add:
+                print("Tentativo di aggiungere marker a \(result.worldCoordinates)")
                 let added = parent.markerManager.addMarker(at: result.worldCoordinates)
                 if added == nil {
-                    // Non è stato possibile aggiungere il marker (limite raggiunto)
-                    DispatchQueue.main.async {
+                    print("Impossibile aggiungere il marker - limite raggiunto")
+                    DispatchQueue.main.async(qos: .userInteractive) {
                         NotificationCenter.default.post(name: NSNotification.Name("MarkerLimitReached"), object: nil)
                     }
+                } else {
+                    print("Marker aggiunto con successo")
                 }
                 
             case .edit:
-                // Verifica se abbiamo cliccato su un marker esistente
-                if let nodeName = result.node.name, nodeName.starts(with: "fiducialMarker_") {
-                    let markerIDString = String(nodeName.dropFirst("fiducialMarker_".count))
+                let nodeName = result.node.name ?? ""
+                
+                // Se abbiamo già un marker selezionato
+                if let markerID = selectedMarkerID {
+                    // Riposiziona il marker alla posizione del click
+                    print("Riposizionamento del marker \(markerID) alla posizione \(result.worldCoordinates)")
+                    parent.markerManager.updateMarker(id: markerID, position: result.worldCoordinates)
+                    
+                    // Deseleziona il marker dopo averlo riposizionato
+                    parent.markerManager.selectMarker(id: nil)
+                    selectedMarkerID = nil
+                }
+                // Altrimenti verifica se abbiamo cliccato su un marker
+                else if nodeName.starts(with: "Marker_") {
+                    let markerIDString = String(nodeName.dropFirst("Marker_".count))
                     if let markerID = UUID(uuidString: markerIDString) {
+                        print("Marker selezionato per modifica: \(markerID)")
                         parent.markerManager.selectMarker(id: markerID)
-                        currentDragMarkerID = markerID
-                        isDragging = true
+                        selectedMarkerID = markerID
                     }
                 } else {
-                    // Se abbiamo cliccato altrove, deseleziona
+                    // Cliccato in un punto vuoto senza avere marker selezionati
+                    print("Nessun marker selezionato per la modifica (node name: \(nodeName))")
                     parent.markerManager.selectMarker(id: nil)
+                    selectedMarkerID = nil
                 }
                 
             case .delete:
                 // Rimuovi il marker se abbiamo cliccato su uno esistente
-                if let nodeName = result.node.name, nodeName.starts(with: "fiducialMarker_") {
-                    let markerIDString = String(nodeName.dropFirst("fiducialMarker_".count))
+                let nodeName = result.node.name ?? ""
+                if nodeName.starts(with: "Marker_") {
+                    let markerIDString = String(nodeName.dropFirst("Marker_".count))
                     if let markerID = UUID(uuidString: markerIDString) {
+                        print("Tentativo di rimuovere marker: \(markerID)")
                         parent.markerManager.removeMarker(id: markerID)
                     }
                 }
                 
             case .view:
                 // In modalità visualizzazione, permette solo di selezionare un marker
-                if let nodeName = result.node.name, nodeName.starts(with: "fiducialMarker_") {
-                    let markerIDString = String(nodeName.dropFirst("fiducialMarker_".count))
+                let nodeName = result.node.name ?? ""
+                if nodeName.starts(with: "Marker_") {
+                    let markerIDString = String(nodeName.dropFirst("Marker_".count))
                     if let markerID = UUID(uuidString: markerIDString) {
+                        print("Marker selezionato per visualizzazione: \(markerID)")
                         parent.markerManager.selectMarker(id: markerID)
                     }
                 } else {
+                    print("Nessun marker selezionato per la visualizzazione")
                     parent.markerManager.selectMarker(id: nil)
                 }
             }
         }
         
-        // Gestisce il movimento del mouse per spostare i marker in modalità edit
+        // Rimuoviamo completamente la funzionalità di trascinamento dal renderer
         func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
-            guard markerMode == .edit, isDragging, let markerID = currentDragMarkerID else { return }
-            
-            guard let scnView = renderer as? SCNView else { return }
-            
-            // Sposta l'elaborazione relativa all'UI sul main thread
-            DispatchQueue.main.async {
-                // Ottiene la posizione attuale del mouse
-                let mouseLocation = NSEvent.mouseLocation
-                let windowPoint = scnView.window?.convertFromScreen(NSRect(x: mouseLocation.x, y: mouseLocation.y, width: 1, height: 1)).origin ?? .zero
-                let viewPoint = scnView.convert(windowPoint, from: nil)
-                
-                // Esegue un hit test per trovare dove si trova il mouse nello spazio 3D
-                let hitResults = scnView.hitTest(viewPoint, options: self.parent.hitTestOptions)
-                
-                // Filtra risultati per escludere marker e piani
-                let results = hitResults.filter { result in
-                    let name = result.node.name ?? ""
-                    return !name.starts(with: "fiducialMarker_") && !name.starts(with: "cuttingPlane_")
-                }
-                
-                // Aggiorna la posizione del marker se c'è un punto valido
-                if let result = results.first {
-                    self.parent.markerManager.updateMarker(id: markerID, position: result.worldCoordinates)
-                }
-            }
+            // Non facciamo nulla - non vogliamo il trascinamento
         }
     }
 }
