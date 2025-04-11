@@ -36,7 +36,11 @@ struct Model3DView: View {
                         showAllPlanes: $viewModel.showAllPlanes,
                         onAddNewPlane: viewModel.addNewPlane,
                         onUpdatePlane: viewModel.updatePlane,
-                        onClearMarkers: viewModel.clearMarkers
+                        onClearMarkers: viewModel.clearMarkers,
+                        onMarkerSelected: { marker in
+                            // Quando un marker viene selezionato dalla lista, sposta la camera verso di esso
+                            viewModel.focusCameraOnMarker(marker)
+                        }
                     )
                     .id("markerControls-\(markerManager.markers.count)") // Force refresh when markers change
                 }
