@@ -22,7 +22,7 @@ struct ModelViewContainer: View {
                         markerMode: markerMode,
                         markerManager: manager,
                         onSceneViewCreated: { view in
-                            DispatchQueue.main.async {
+                            DispatchQueue.main.async(qos: .userInteractive) {
                                 scnView = view
                                 print("SceneKitMarkerView creata e assegnata")
                             }
