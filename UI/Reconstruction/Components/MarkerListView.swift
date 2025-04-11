@@ -6,6 +6,9 @@ struct MarkerListView: View {
     @ObservedObject var markerManager: MarkerManager
     let activePlaneID: UUID?
     
+    // Callback per quando un marker viene selezionato dalla lista
+    var onMarkerSelected: (Marker) -> Void
+    
     // MARK: - UI
     var body: some View {
         VStack {
@@ -39,6 +42,18 @@ struct MarkerListView: View {
                                     .padding(.horizontal, 8)
                                     .background(Color(plane.color).opacity(0.15))
                                     .cornerRadius(16)
+                                    .contentShape(Rectangle()) // Assicura che l'intera area sia cliccabile
+                                    .onTapGesture {
+                                        // Quando un marker viene cliccato, richiama il callback
+                                        onMarkerSelected(marker)
+                                        // Seleziona anche il marker nel MarkerManager
+                                        markerManager.selectMarker(id: marker.id)
+                                    }
+                                    // Evidenzia il marker se è selezionato
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 16)
+                                            .stroke(markerManager.selectedMarkerID == marker.id ? Color.yellow : Color.clear, lineWidth: 2)
+                                    )
                                 }
                             }
                             .padding(.horizontal, 2)
@@ -59,7 +74,6 @@ struct MarkerListView: View {
                 }
             }
         }
-        // Aggiunto un ID alla vista principale per forzare l'aggiornamento quando i marker cambiano
         .id("markerList-\(markerManager.markers.count)")
     }
 }
