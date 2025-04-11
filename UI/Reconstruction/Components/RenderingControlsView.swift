@@ -74,7 +74,7 @@ struct RenderingControlsView: View {
                         }
                         
                         Button("Model with Markers") {
-                            // Note: This would need to be called from Model3DView since we need markerManager
+                            onExportModelWithMarkers()
                         }
                     } label: {
                         HStack {
