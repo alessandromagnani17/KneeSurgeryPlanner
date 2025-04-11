@@ -1,6 +1,8 @@
 import Foundation
+import SwiftUI
 import SceneKit
 import simd
+import Combine
 
 /// Represents a marker in the 3D scene
 struct Marker: Identifiable {
@@ -40,15 +42,21 @@ enum MarkerMode {
 }
 
 /// Class to manage markers and cutting planes
-class MarkerManager {
+class MarkerManager: ObservableObject {
+    // Nomi delle notifiche
+    static let markerAdded = NSNotification.Name("MarkerAdded")
+    static let markerRemoved = NSNotification.Name("MarkerRemoved")
+    static let markerUpdated = NSNotification.Name("MarkerUpdated")
+    static let markersCleared = NSNotification.Name("MarkersCleared")
+    
     // Collection of cutting planes
-    private(set) var cuttingPlanes: [CuttingPlane] = []
+    @Published private(set) var cuttingPlanes: [CuttingPlane] = []
     
     // Collection of markers grouped by plane
-    private(set) var markers: [Marker] = []
+    @Published private(set) var markers: [Marker] = []
     
     // Currently active plane group
-    private(set) var activePlaneID: UUID?
+    @Published private(set) var activePlaneID: UUID?
     
     // SceneKit nodes associated with markers
     private var markerNodes: [UUID: SCNNode] = [:]
@@ -64,7 +72,7 @@ class MarkerManager {
     private weak var scene: SCNScene?
     
     // Currently selected marker
-    private(set) var selectedMarkerID: UUID?
+    @Published private(set) var selectedMarkerID: UUID?
     
     /// Initialize the manager with the scene
     init(scene: SCNScene) {
@@ -93,6 +101,7 @@ class MarkerManager {
     func addCuttingPlane(name: String, color: NSColor) -> UUID {
         let newPlane = CuttingPlane(name: name, color: color)
         cuttingPlanes.append(newPlane)
+        NotificationCenter.default.post(name: MarkerManager.markerUpdated, object: self, userInfo: ["planeID": newPlane.id])
         return newPlane.id
     }
     
@@ -116,6 +125,8 @@ class MarkerManager {
         if activePlaneID == id {
             activePlaneID = cuttingPlanes.first?.id
         }
+        
+        NotificationCenter.default.post(name: MarkerManager.markerUpdated, object: self, userInfo: ["planeID": id])
     }
     
     /// Get the color associated with a plane
@@ -142,6 +153,13 @@ class MarkerManager {
         markers.append(marker)
         createMarkerNode(for: marker)
         updateCuttingPlane(planeID: activePlaneID)
+        
+        // Invia notifica
+        NotificationCenter.default.post(name: MarkerManager.markerAdded, object: self, userInfo: ["marker": marker, "planeID": activePlaneID])
+        
+        // Forza un aggiornamento dell'interfaccia UI
+        objectWillChange.send()
+        
         return marker
     }
     
@@ -163,6 +181,12 @@ class MarkerManager {
             }
             
             updateCuttingPlane(planeID: planeID)
+            
+            // Invia notifica
+            NotificationCenter.default.post(name: MarkerManager.markerRemoved, object: self, userInfo: ["markerID": id, "planeID": planeID])
+            
+            // Forza un aggiornamento dell'interfaccia UI
+            objectWillChange.send()
         }
     }
     
@@ -196,6 +220,9 @@ class MarkerManager {
                markersToRemove.contains(where: { $0.id == selectedID }) {
                 selectedMarkerID = nil
             }
+            
+            // Invia notifica
+            NotificationCenter.default.post(name: MarkerManager.markersCleared, object: self, userInfo: ["planeID": specificPlaneID])
         } else {
             // Remove all markers from all planes
             for (_, node) in markerNodes {
@@ -214,7 +241,13 @@ class MarkerManager {
             markers.removeAll()
             markerNodes.removeAll()
             selectedMarkerID = nil
+            
+            // Invia notifica
+            NotificationCenter.default.post(name: MarkerManager.markersCleared, object: self, userInfo: nil)
         }
+        
+        // Forza un aggiornamento dell'interfaccia UI
+        objectWillChange.send()
     }
     
     /// Update a marker's position
@@ -231,6 +264,12 @@ class MarkerManager {
         }
         
         updateCuttingPlane(planeID: planeID)
+        
+        // Invia notifica
+        NotificationCenter.default.post(name: MarkerManager.markerUpdated, object: self, userInfo: ["markerID": id, "planeID": planeID])
+        
+        // Forza un aggiornamento dell'interfaccia UI
+        objectWillChange.send()
     }
     
     /// Select a marker
@@ -252,6 +291,9 @@ class MarkerManager {
                 sphere.firstMaterial?.diffuse.contents = selectedMarkerColor
             }
         }
+        
+        // Forza un aggiornamento dell'interfaccia UI
+        objectWillChange.send()
     }
     
     /// Find the nearest marker to a given position
