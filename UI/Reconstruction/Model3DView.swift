@@ -885,17 +885,4 @@ struct Model3DView: View {
             }
         }
     }
-    
-    /// Annulla l'ultima linea disegnata
-    private func undoLastDrawing() {
-        guard !drawingLines.isEmpty else { return }
-        
-        // Rimuovi l'ultima linea
-        let lastLine = drawingLines.removeLast()
-        
-        // Rimuovi tutti i nodi associati dalla scena
-        for node in lastLine.nodes {
-            node.removeFromParentNode()
-        }
-    }
 }
