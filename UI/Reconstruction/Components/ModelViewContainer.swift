@@ -7,10 +7,7 @@ struct ModelViewContainer: View {
     @Binding var scene: SCNScene
     @Binding var scnView: SCNView?
     @Binding var markerMode: MarkerMode
-    let markerManager: FiducialMarkerManager?
-    
-    // Usiamo una variabile privata per tracciare quando la view è stata creata
-    @State private var hasSetupSceneView = false
+    let markerManager: MarkerManager?
     
     // MARK: - UI
     var body: some View {
@@ -19,17 +16,15 @@ struct ModelViewContainer: View {
                 if let manager = markerManager {
                     SceneKitMarkerView(
                         scene: scene,
-                        allowsCameraControl: markerMode != .edit,
+                        // Sempre permettere controllo camera e gestire manualmente durante edit
+                        allowsCameraControl: true,
                         autoenablesDefaultLighting: true,
                         markerMode: markerMode,
                         markerManager: manager,
                         onSceneViewCreated: { view in
-                            // Salviamo la view per usarla dopo
                             DispatchQueue.main.async {
-                                if !hasSetupSceneView {
-                                    scnView = view
-                                    hasSetupSceneView = true
-                                }
+                                scnView = view
+                                print("SceneKitMarkerView creata e assegnata")
                             }
                         }
                     )
@@ -39,14 +34,18 @@ struct ModelViewContainer: View {
                         allowsCameraControl: true,
                         autoenablesDefaultLighting: false,
                         onSceneViewCreated: { view in
-                            DispatchQueue.main.async {
-                                if !hasSetupSceneView {
-                                    scnView = view
-                                    hasSetupSceneView = true
-                                }
+                            DispatchQueue.main.async(qos: .userInteractive) {
+                                scnView = view
+                                print("SceneKitView creata e assegnata")
                             }
                         }
                     )
+                }
+            }
+            .onChange(of: markerMode) { oldValue, newValue in
+                // Quando si cambia modalità, assicurati che il controllo camera sia appropriato
+                if newValue != .edit {
+                    scnView?.allowsCameraControl = true
                 }
             }
         }
