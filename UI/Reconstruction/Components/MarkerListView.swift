@@ -51,14 +51,15 @@ struct MarkerListView: View {
                                             .font(.system(size: 12))
                                             .padding(.vertical, 4)
                                             .padding(.horizontal, 8)
-                                            .background(Color(plane.color).opacity(0.15))
-                                            .cornerRadius(16)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 16)
+                                                    .fill(Color(plane.color).opacity(0.15))
+                                            )
                                             .overlay(
                                                 RoundedRectangle(cornerRadius: 16)
-                                                    // Usa sia lo state locale che quello del model
-                                                    .stroke(localSelectedMarkerID == marker.id ||
+                                                    .strokeBorder(localSelectedMarkerID == marker.id ||
                                                             markerManager.selectedMarkerID == marker.id
-                                                            ? Color.yellow : Color.clear, lineWidth: 2)
+                                                            ? Color.yellow : Color.clear, lineWidth: 1)
                                             )
                                     }
                                     .buttonStyle(PlainButtonStyle())
